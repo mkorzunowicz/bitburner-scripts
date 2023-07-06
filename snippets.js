@@ -41,4 +41,6 @@ run infi_loop.js "ECorp" 1 "Ishima"
 run infi_loop.js "ECorp" 1 "Tian Di Hui"
 run infi_loop.js "ECorp" 5 "CyberSec"
 
+moneyinfi "ECorp" 2 "The Black Hand"
+
 }
