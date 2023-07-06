@@ -1,7 +1,9 @@
-
-/** @param {NS} ns */
+/** Run this script on your home machine. It will run in a loop to fetch all the servers in the network
+ *  analyze them. Figure out which ones can be hacked and which can be used to hack. Then spreads the scripts around
+ *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are run to not overlap. It's moneymaking optimal. Not sure if exp making optimal.
+ * @param {NS} ns */
 export async function main(ns) {
-  //1. let analyze all servers for hack/grow/weaken information along with possibility to hack it and times it would take
+  //1. analyze all servers for hack/grow/weaken information along with possibility to hack it and times it would take
   //2. at first filter out those that don't fit our level or amount of ports openable
   //3. sort them by how easy it is to hack them
   //4. calculate the overall amount of available threads worldwide for load distribution
@@ -9,23 +11,9 @@ export async function main(ns) {
   let openablePorts;// = numberOfPortsOpenable(ns);
   let playerHackingLevel;// = ns.getHackingLevel();
 
+  // contains ALL the servers on the network
   let allServers = {
-    availableRam() {
-      // not necessarily meaningful.. to delete
-      let totalAvailableRam = 0;
-      for (const server in this) {
-        if (this.hasOwnProperty(server) && typeof this[server] === 'object') {
-          if (this[server].hackability && typeof this[server].hackability.availableRam === 'number') {
-            if (this[server].hackability.portsRequired <= openablePorts &&
-              this[server].hackability.requiredHackingLevel <= playerHackingLevel
-            )
-              totalAvailableRam += this[server].hackability.availableRam;
-          }
-        }
-      }
-      return totalAvailableRam;
-    },
-
+    // counts on how many threads we can currently run a script on
     runnableScriptThreads() {
       let totalRunnableScriptThreads = 0;
       for (const server in this) {
@@ -71,6 +59,7 @@ export async function main(ns) {
 
       return sortedHash;
     },
+    // returns servers we can hack sorted by difficulty
     hackableSortedByHackingLevel() {
       const hackable = this.hackableServers();
       const sortedHash = {};
@@ -102,6 +91,7 @@ export async function main(ns) {
       }
       return sortedHash;
     },
+    // filters out all the servers which we can hack on
     executingServers() {
       const executing = {};
       for (const server in this) {
@@ -114,6 +104,7 @@ export async function main(ns) {
           }
         }
       }
+      // returns a pool of servers which will fullfil the requested threadscount
       executing.serverPool = function (threadsToFullfill) {
         let pool = {};
         let threadsFound = 0;
@@ -247,17 +238,15 @@ export async function run_script(ns, runningScripts, execServers, hackableServer
           runTime: runTime,
           endsAt: new Date(new Date().getTime() + runTime)
         });
-        // ns.tail(scriptPid);
         threadsLeft -= requiredThreads;
-        // debugger;
       }
     }
-    // debugger;
     await ns.sleep(50);
   }
 }
 
-/** @param {NS} ns 
+/** Maps the network and populates the 'visited' array with network names including 'home' and purchased servers
+ *  @param {NS} ns 
  * @param {string} serv Server to search through
  * @param {Array<string>} visited Already visited servers
 */
@@ -274,7 +263,10 @@ export async function recursive_scan(ns, serv, visited) {
   }
 }
 
-/** @param {NS} ns */
+/** 
+ * @param {NS} ns 
+ * @param {string} serv Server to search through
+ * */
 export function analyzeServer(ns, target) {
   let moneyMax = ns.getServerMaxMoney(target);
   let moneyAvailable = ns.getServerMoneyAvailable(target);
@@ -358,7 +350,6 @@ export function analyzeServer(ns, target) {
     portsRequired: ns.getServerNumPortsRequired(target),
 
     ramToRunAllThreads: hackScriptRam * hackThreads,
-
   };
   analysis.growth = {
     threads: growthThreads,
@@ -367,8 +358,6 @@ export function analyzeServer(ns, target) {
     moneyToMax: moneyToMax,
     ramToGrowToMax: growScriptRam * growthThreads,
     growthParameter: growth
-
-
   };
   analysis.hackability = {
     maxRam: ns.getServerMaxRam(target),
@@ -377,60 +366,18 @@ export function analyzeServer(ns, target) {
     availableRam: availableRam,
     runnableScriptThreads: Math.floor(availableRam / weakenScriptRam),
     requiredHackingLevel: requiredHackingLevel,
-
   };
   return analysis;
-  // return {
-  //   weaken: {
-  //     time: timeWeaken,
-  //     threadsToWeakenToMin: weakenThreads,
-  //     securityCurrent: securityCurrent,
-  //     securityMin: securityMin,
-  //     securityDiff: securityDiff,
-  //     scriptRam: weakenScriptRam,
-  //     ramToRunAllThreads: weakenScriptRam * weakenThreads,
-  //   },
-  //   hack: {
-  //     threadsToStealAll: hackThreads,
-  //     time: timeHack,
-  //     securityIncrease: securityIncreaseOnHack,
-  //     requiredHackingLevel: requiredHackingLevel,
-  //     moneyAvailable: moneyAvailable,
-  //     moneyMax: moneyMax,
-  //     hackChance: hackChance,
-  //     portsRequired: ns.getServerNumPortsRequired(target),
-
-  //     ramToRunAllThreads: hackScriptRam * hackThreads,
-
-  //   },
-  //   growth: {
-  //     threads: growthThreads,
-  //     securityIncrease: securityIncreaseOnGrowth,
-  //     time: timeGrowth,
-  //     moneyToMax: moneyToMax,
-  //     ramToGrowToMax: growScriptRam * growthThreads,
-  //     growthParameter: growth
-
-
-  //   },
-  //   hackability: {
-  //     maxRam: ns.getServerMaxRam(target),
-  //     portsRequired: ns.getServerNumPortsRequired(target),
-  //     usedRam: usedRam,
-  //     availableRam: availableRam,
-  //     runnableScriptThreads: Math.floor(availableRam / weakenScriptRam),
-  //     requiredHackingLevel: requiredHackingLevel,
-
-  //   },
-  //   name: target,
-  //   hackable: moneyMax != 0,
-  //   recommendedScript: recommendedScript
-  // };
 }
 
-/** @param {NS} ns */
+/** Calculates how many threads are required to decrease the security by this many levels
+ * @param {NS} ns 
+ * @param {number} securityLevelsToDecrease
+ 
+ * */
 export function threadsToWeaken(ns, securityLevelsToDecrease) {
   if (securityLevelsToDecrease == 0) return 0;
+
   let weakenAmount = 0;
   let threads = 0;
   // debugger;
@@ -438,33 +385,6 @@ export function threadsToWeaken(ns, securityLevelsToDecrease) {
     weakenAmount = ns.weakenAnalyze(threads++);
   }
   return threads;
-}
-
-
-/** @param {NS} ns 
- * @param {string} serv Server to hack
-*/
-export async function run_hack(ns, serv) {
-  const scriptName = "better_hacking.js";
-  if (ns.isRunning(scriptName, serv)) return;
-
-  if (ns.getServerNumPortsRequired(serv) > numberOfPortsOpenable(ns)) return;
-  crackPorts(ns, serv);
-
-  const availableRam = ns.getServerMaxRam(serv) - ns.getServerUsedRam(serv);
-  if (availableRam < 8) return;
-
-  let myLevel = ns.getHackingLevel();
-  let servLevel = ns.getServerRequiredHackingLevel(serv);
-  if (servLevel <= myLevel || serv == 'home') {
-    copyScripts(ns, ['hack.js', 'grow.js', 'weaken.js'], serv);
-    ns.tprint("Spreading to: " + serv);
-    ns.print("Spreading to: " + serv);
-    ns.exec(scriptName, serv, 1);
-  }
-  else {
-    // ns.tprint("Didn't spread to: " + serv + ". My level:" + myLevel + " Req: " + servLevel);
-  }
 }
 
 /** @param {NS} ns 
@@ -482,7 +402,6 @@ export function copyScripts(ns, scriptNames, serv) {
  *  @param {String} serverName
 */
 export async function crackPorts(ns, serverName) {
-
   try {
     if (ns.fileExists('BruteSSH.exe', 'home'))
       ns.brutessh(serverName);
