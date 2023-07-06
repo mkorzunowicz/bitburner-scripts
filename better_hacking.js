@@ -21,7 +21,8 @@ export async function main(ns) {
   while (true) {
     if (shouldDrawTarget)
       target = whatToHack(ns);
-
+    // const analysis = analyzeServer(ns, target);
+    // debugger;
     // Defines how much money a server should have before we hack it
     // In this case, it is set to 65% of the server's max money
     const moneyThresh = ns.getServerMaxMoney(target) * 0.65;
@@ -56,20 +57,91 @@ export async function main(ns) {
 }
 
 /** @param {NS} ns */
-export function analyzeHack(ns, target) {
-  
-  let serverGrowth = ns.getServerGrowth(target);
-  let weakTime = ns.getWeakenTime(target);
-  let groTime = ns.getGrowTime(target);
-  let hacTime = ns.getHackTime(target);
-  let moneyStolenPerThread = ns.hackAnalyze(target);
+export function threadsToWeaken(ns, securityLevelsToDecrease) {
+  if (securityLevelsToDecrease == 0) return 0;
+  let weakenAmount;
+  let threads = 0;
+  while (securityLevelsToDecrease > weakenAmount) {
+    weakenAmount = ns.weakenAnalyze(threads++);
+  }
+  return threads;
+}
 
-  let minServerLevel = ns.getServerMinSecurityLevel(target);
+/** @param {NS} ns */
+export function analyzeServer(ns, target) {
+  // to wszystko bierze pod uwagę że wątków mamy nieskończoność, ale trzeba jeszcze będzie wziąć pod uwagę ograniczone możliwości serwerów - co jeśli nie mam wystarczająco, by grow wywołał spodziewany efekt...
+  // będzie trzeba dzielić dostępne serwery na części
+
+  let moneyMax = ns.getServerMaxMoney(target);
   let moneyAvailable = ns.getServerMoneyAvailable(target);
-  let requiredHackingLevel = ns.getServerRequiredHackingLevel(target);
-  let maxMoney = ns.getServerMaxMoney(target);
-  let securityLevel = ns.getServerSecurityLevel(target);
+  let growthThreads = 0;
+  let moneyToMax;
+  let securityIncreaseOnGrowth;
+  // let hackThreads = ns.hackAnalyzeThreads(target, moneyMax); //must be available only?
+  let hackThreads = 1 / ns.hackAnalyze(target);
+  // let hackThreads = ns.threadsToHackAllMoney(target, moneyMax); //must be available only?
+  let securityIncreaseOnHack = ns.hackAnalyzeSecurity(hackThreads, target);
+  let securityMin = ns.getServerMinSecurityLevel(target);
+  let securityCurrent = ns.getServerSecurityLevel(target);
+  let securityDiff = securityCurrent - securityMin;
 
+  // let wea = ns.weakenAnalyze(2);
+  let weakenThreads = threadsToWeaken(ns, securityDiff);
+  if (moneyAvailable != moneyMax) {
+    moneyToMax = moneyMax - moneyAvailable;
+    let multiplier = moneyToMax / moneyAvailable;
+    growthThreads = Math.ceil(ns.growthAnalyze(target, multiplier));
+    securityIncreaseOnGrowth = ns.growthAnalyzeSecurity(growthThreads);
+    // ns.formulas.hacking.growThreads
+  }
+  let growth = ns.getServerGrowth(target);
+  let timeWeaken = ns.getWeakenTime(target);
+  let timeGrowth = ns.getGrowTime(target);
+  let timeHack = ns.getHackTime(target);
+  // let moneyStolenPerThread = ns.hackAnalyze(target);
+  let requiredHackingLevel = ns.getServerRequiredHackingLevel(target);
+  // max :15, is: 5, diff: 10, 10/5=2
+  // let multits = ns.getHackingMultipliers();
+  // debugger;
+  return {
+    weaken: {
+      time: timeWeaken,
+      threads: weakenThreads,
+      securityCurrent: securityCurrent,
+      securityMin: securityMin,
+      securityDiff: securityDiff
+    },
+    hack: {
+      threads: hackThreads,
+      time: timeHack,
+      securityIncrease: securityIncreaseOnHack,
+      requiredHackingLevel: requiredHackingLevel,
+      moneyAvailable: moneyAvailable,
+
+
+
+    },
+    growth: {
+      threads: growthThreads,
+      securityIncrease: securityIncreaseOnGrowth,
+      time: timeGrowth,
+      moneyToMax: moneyToMax,
+
+
+    }
+    // growth: ns.getServerGrowth(target),
+    // growthThreadsToMax: growthThreads,
+    // timeWeaken: ns.getWeakenTime(target),
+    // timeGrow: ns.getGrowTime(target),
+    // timeHack: ns.getHackTime(target),
+    // moneyStolenPerThread: ns.hackAnalyze(target),
+    // moneyAvailable: ns.getServerMoneyAvailable(target),
+    // moneyToMax: diff,
+    // moneyMax: ns.getServerMaxMoney(target),
+    // requiredHackingLevel: ns.getServerRequiredHackingLevel(target),
+    // securityMin: ns.getServerMinSecurityLevel(target),
+    // securityCurrent: ns.getServerSecurityLevel(target)
+  };
   // ns.hackAnalyzeThreads
 }
 
@@ -126,7 +198,7 @@ export function whatToHack(ns) {
     else hackTarget = 'megacorp';
   }
   else if (ns.getHackingLevel() > 1500 && noOfPorts == 5) {
-    if (what > 7) hackTarget = 'microdyne';    
+    if (what > 7) hackTarget = 'microdyne';
     else if (what > 3) hackTarget = 'zb-institute';
     else hackTarget = 'titan-labs';
   }
@@ -134,8 +206,8 @@ export function whatToHack(ns) {
     if (what > 5) hackTarget = 'univ-energy';
     else hackTarget = 'global-pharm';
   }
-  else if (ns.getHackingLevel() > 1000  && noOfPorts == 3) {
-    if (what > 5) hackTarget = 'catalyst';    
+  else if (ns.getHackingLevel() > 1000 && noOfPorts == 3) {
+    if (what > 5) hackTarget = 'catalyst';
     else hackTarget = 'millenium-fitness';
   }
   else if (ns.getHackingLevel() > 300 && noOfPorts == 2) {
@@ -143,7 +215,7 @@ export function whatToHack(ns) {
     else if (what > 3) hackTarget = 'crush-fitness';
     else hackTarget = 'silver-helix';
   }
-  else if (ns.getHackingLevel() > 200  && noOfPorts == 1) {
+  else if (ns.getHackingLevel() > 200 && noOfPorts == 1) {
     if (what > 7) hackTarget = 'max-hardware';
     else if (what > 3) hackTarget = 'neo-net';
     else hackTarget = 'iron-gym';
