@@ -35,7 +35,6 @@ export async function main(ns) {
       }
       return totalRunnableScriptThreads;
     },
-
     hackableServers() {
       const hackable = {};
       for (const server in this) {
@@ -216,7 +215,6 @@ export async function run_script(ns, runningScripts, execServers, hackableServer
       }
       else
         ns.print("Couldn't run " + serverToHack.recommended.scriptName + " on " + execServ.name + " targeting " + serverToHack.name + ". Threads: " + thNo);
-
     }
   }
 }
@@ -263,7 +261,6 @@ export function analyzeServer(ns, target, runningScripts) {
     if (multiplier < 1 && multiplier > 0) multiplier = 1;
     if (target != 'home') growthThreads = Math.ceil(ns.growthAnalyze(target, multiplier));
     securityIncreaseOnGrowth = ns.growthAnalyzeSecurity(growthThreads);
-    // ns.formulas.hacking.growThreads
   }
   let growScriptRam = ns.getScriptRam('grow.js');
   let hackScriptRam = ns.getScriptRam('hack.js');
@@ -278,18 +275,14 @@ export function analyzeServer(ns, target, runningScripts) {
   let usedRam = ns.getServerUsedRam(target);
   let maxRam = ns.getServerMaxRam(target);
   let availableRam = maxRam - usedRam;
-  if (target == 'home')
-    availableRam -= 30;
+  if (target == 'home') availableRam -= 30;
 
   let recommendedScript;
   if (moneyMax != 0) {
-    if (moneyAvailable != moneyMax && growthThreads > 0)
-      recommendedScript = 'grow';
+    if (moneyAvailable != moneyMax && growthThreads > 0) recommendedScript = 'grow';
     else {
-      if (securityCurrent != securityMin)
-        recommendedScript = 'weaken';
-      else
-        recommendedScript = 'hack';
+      if (securityCurrent != securityMin) recommendedScript = 'weaken';
+      else recommendedScript = 'hack';
     }
   }
   let requiredThreads;
@@ -329,7 +322,6 @@ export function analyzeServer(ns, target, runningScripts) {
     moneyMax: moneyMax,
     hackChance: hackChance,
     portsRequired: ns.getServerNumPortsRequired(target),
-
     ramToRunAllThreads: hackScriptRam * hackThreads,
   };
   analysis.growth = {
@@ -352,7 +344,6 @@ export function analyzeServer(ns, target, runningScripts) {
     scriptName: recommendedScript,
     requiredThreads: requiredThreads,
     runTime: runTime
-
   };
   return analysis;
 }
@@ -418,7 +409,6 @@ export function numberOfPortsOpenable(ns) {
     count++;
   return count;
 }
-
 
 class ServerAnalysis {
   constructor() {
