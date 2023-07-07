@@ -1,9 +1,15 @@
 /** Run this script on your home machine. It will run in a loop to fetch all the servers in the network
  *  analyze them. Figure out which ones can be hacked and which can be used to hack. Then spreads the scripts around
- *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are run to not overlap. It's moneymaking optimal. Not sure if exp making optimal.
+ *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are ran to not overlap. It's moneymaking optimal. Not sure if exp making optimal.
  * @param {NS} ns */
 export async function main(ns) {
   ns.disableLog('ALL');
+  // ns.killall('home');
+  // if (!ns.isRunning("expand_servers.js")) {
+  const expandPid = ns.exec("expand_servers.js", 'home');
+  if (expandPid != 0)
+    ns.tprint("Started server expand loop");
+  // }
   //1. analyze all servers for hack/grow/weaken information along with possibility to hack it and times it would take
   //2. at first filter out those that don't fit our level or amount of ports openable
   //3. sort them by how easy it is to hack them
@@ -142,13 +148,6 @@ export async function main(ns) {
       }
     }
   }
-  // ns.disableLog("ALL");
-  // ns.killall('home');
-  // // if (!ns.isRunning("expand_servers.js")) {
-  // const expandPid = ns.exec("expand_servers.js", 'home');
-  // if (expandPid != 0)
-  //   ns.tprint("Started server expand loop");
-  // // }
   let visited = [];
 
   while (true) {
@@ -156,14 +155,13 @@ export async function main(ns) {
     runningScripts.cleanup();
     openablePorts = numberOfPortsOpenable(ns);
     playerHackingLevel = ns.getHackingLevel();
-    // scan all servers
 
+    // scan all servers
     for (const serv of visited) {
       allServers[serv] = analyzeServer(ns, serv, runningScripts);
     }
 
     const runnableScriptThreads = allServers.runnableScriptThreads();
-    // const hackable = allServers.hackableServers();
     const sorted = allServers.hackableSortedByHackingLevel();
     const execServers = allServers.executingServers();
 
@@ -262,13 +260,8 @@ export function analyzeServer(ns, target, runningScripts) {
     moneyToMax = moneyMax - moneyAvailable;
     if (moneyAvailable == 0) moneyAvailable = 1; // this is kinda stupid, but infinity doesn't work, so :/
     let multiplier = moneyToMax / moneyAvailable;
-    if (multiplier < 1 && multiplier > 0)
-      multiplier = 1;
-    // debugger;
-    // if (multiplier > 10)
-    // debugger;
-    if (target != 'home')
-      growthThreads = Math.ceil(ns.growthAnalyze(target, multiplier));
+    if (multiplier < 1 && multiplier > 0) multiplier = 1;
+    if (target != 'home') growthThreads = Math.ceil(ns.growthAnalyze(target, multiplier));
     securityIncreaseOnGrowth = ns.growthAnalyzeSecurity(growthThreads);
     // ns.formulas.hacking.growThreads
   }
@@ -315,13 +308,9 @@ export function analyzeServer(ns, target, runningScripts) {
       runTime = timeGrowth;
       break;
   };
-  // max :15, is: 5, diff: 10, 10/5=2
-  // let multits = ns.getHackingMultipliers();
-  // debugger;
   const analysis = new ServerAnalysis();
   analysis.name = target;
   analysis.hackable = moneyMax != 0;
-  // analysis.recommendedScript = recommendedScript;
   analysis.weaken = {
     time: timeWeaken,
     threadsToWeakenToMin: weakenThreads,
@@ -374,25 +363,11 @@ export function analyzeServer(ns, target, runningScripts) {
  * */
 export function threadsToWeaken(ns, securityLevelsToDecrease) {
   let threads = 0;
-
   while (ns.weakenAnalyze(threads) < securityLevelsToDecrease) {
     threads++;
   }
-
   return threads;
 }
-
-// export function threadsToWeaken(ns, securityLevelsToDecrease) {
-//   if (securityLevelsToDecrease == 0) return 0;
-
-//   let weakenAmount = 0;
-//   let threads = 0;
-//   // debugger;
-//   while (securityLevelsToDecrease > weakenAmount) {
-//     weakenAmount = ns.weakenAnalyze(threads++);
-//   }
-//   return threads;
-// }
 
 /** @param {NS} ns 
  * @param {Array<string>} scriptNames scripts to send
@@ -447,62 +422,12 @@ export function numberOfPortsOpenable(ns) {
 
 class ServerAnalysis {
   constructor() {
-    this.weaken = {
-      // time: timeWeaken,
-      // threadsToWeakenToMin: weakenThreads,
-      // securityCurrent: securityCurrent,
-      // securityMin: securityMin,
-      // securityDiff: securityDiff,
-      // scriptRam: weakenScriptRam,
-      // ramToRunAllThreads: weakenScriptRam * weakenThreads,
-    };
-    this.hack = {
-      // threadsToStealAll: hackThreads,
-      // time: timeHack,
-      // securityIncrease: securityIncreaseOnHack,
-      // requiredHackingLevel: requiredHackingLevel,
-      // moneyAvailable: moneyAvailable,
-      // moneyMax: moneyMax,
-      // hackChance: hackChance,
-      // portsRequired: ns.getServerNumPortsRequired(target),
-
-      // ramToRunAllThreads: hackScriptRam * hackThreads,
-
-    };
-    this.growth = {
-      // threads: growthThreads,
-      // securityIncrease: securityIncreaseOnGrowth,
-      // time: timeGrowth,
-      // moneyToMax: moneyToMax,
-      // ramToGrowToMax: growScriptRam * growthThreads,
-      // growthParameter: growth
-
-
-    };
-    this.hackability = {
-      // maxRam: ns.getServerMaxRam(target),
-      // portsRequired: ns.getServerNumPortsRequired(target),
-      // usedRam: usedRam,
-      // availableRam: availableRam,
-      // runnableScriptThreads: Math.floor(availableRam / weakenScriptRam),
-      // requiredHackingLevel: requiredHackingLevel,
-
-    };
-    this.recommended = {
-      // maxRam: ns.getServerMaxRam(target),
-      // portsRequired: ns.getServerNumPortsRequired(target),
-      // usedRam: usedRam,
-      // availableRam: availableRam,
-      // runnableScriptThreads: Math.floor(availableRam / weakenScriptRam),
-      // requiredHackingLevel: requiredHackingLevel,
-
-    };
+    this.weaken = {};
+    this.hack = {};
+    this.growth = {};
+    this.hackability = {};
+    this.recommended = {};
     this.name = 'Server name';
     this.hackable = false;
-    this.recommendedScript = 'weaken';
   };
-
-  // method() {
-  //   console.log('Custom method');
-  // }
 }
