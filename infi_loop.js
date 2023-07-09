@@ -96,9 +96,8 @@ const cityCompanyDict = {
         return null; // Return null if name is not found
     }
 };
-function findCompanyToHackForFaction(company)
-{
-
+function findCompanyToHackForFaction(company) {
+    // TODO with singularity?
 }
 /** @param {NS} ns */
 export async function main(ns) {
@@ -135,26 +134,25 @@ export async function main(ns) {
     ns.atExit(() => {
         doc.removeEventListener('keydown', handleEscapeKey);
 
-        ns.tprint('Looped Infiltration ended. Successful runs: ' + successful);
-        console.log('Looped Infiltration ended. Successful runs: ' + successful);
-    });
+        let msg = `Looped Infiltration ended. Successful: ${successful} / ${count}`;
 
-    let playerFactions = ns.getPlayer().factions;
+        ns.tprint(msg);
+        console.log(msg);
+    });
+    let startDate;
+    let playerFactions = ns.getPlayer().factions; // TODO instead of iterating through all, we could use the joined ones
     while (shouldRun && timesToRun > successful) {
         try {
-
             let seeLevel = finByXpath(runningXpath);
             let seeEnterScreen = finByXpath(textContainsXpath("Infiltrating ")); // is infi.js running?
-
             let seeSellFor = finByXpath(sellForXpath);
-            // console.log(seeLevel);
-            // console.log(seeSellFor);
+
             if (seeSellFor) {
-                // console.log("found sell for");
                 successful++;
+
+                let msg = '';
                 if (factionToIncrease) {
                     invokeMouseDownEvent(finByXpath(textContainsXpath('none', 'div'))); // select Faction
-
                     let faction = factionToIncrease;
                     let runsLeft;
                     if (factionToIncrease === 'all') {
@@ -176,7 +174,7 @@ export async function main(ns) {
                                 else break;
                             }
                             else {
-                                console.log('faction not joined: ' + f.name);
+                                // console.log('faction not joined: ' + f.name);
                                 factions.shift();
                             }
                         }
@@ -186,43 +184,45 @@ export async function main(ns) {
                         }
                         else factionToIncrease = null; // lets continue grinding money!
                     }
+                    else {
+                        if (successful == timesToRun) {
+                            ns.tprint("Faction runs finished. Grinding money");
+                            factionToIncrease = null; timesToRun = 99999;
+                        }
+                    }
                     await clickByXpath(textEqualsXpath(faction, 'li')); // select the Faction
 
                     const tradeForXpath = textContainsXpath('Trade for');
-
                     const tradeForAmount = finByXpath(tradeForXpath).querySelector('span').textContent;
 
-                    const msg = 'trading for ' + tradeForAmount + ' faction rep: ' + faction;
-                    console.log(msg);
-                    if (runsLeft)
-                        // ns.toast('Trading for faction rep: ' + faction + ' Runs left: ' + runsLeft, ToastVariant.SUCCESS, 5000);
-                        ns.toast(msg + ' Runs left: ' + runsLeft);
-                    else
-                        ns.toast(msg);
+                    // msg += ' Trading for ' + tradeForAmount + ' faction rep to: ' + faction;
+                    msg += ` Trading for ${tradeForAmount} faction rep to: ${faction}`;
+                    if (runsLeft) msg += ' Runs left: ' + runsLeft;
 
                     await clickByXpath(tradeForXpath);
                 }
                 else {
-
                     const tradeForAmount = finByXpath(sellForXpath).querySelector('span').textContent;
-
-                    console.log("Selling work for " + tradeForAmount);
-
+                    msg += " Selling work for " + tradeForAmount;
                     await clickByXpath(sellForXpath);
                 }
-                await ns.sleep(500);
+                msg += ` Took: ${timeTakenInSeconds(startDate, new Date())}s. Successful: ${successful} / ${count}`;
+                msg = msg.trimStart();
+                console.log(msg);
+                ns.toast(msg);
+                await ns.sleep(200);
             }
             else if (seeLevel || seeEnterScreen) {
                 // console.log("running..");
-                await ns.sleep(2000);
+                await ns.sleep(500);
             }
             else {
+                startDate = new Date();
                 count++;
-                console.log('Started infiltration ' + count + " Successful: " + successful);
+                console.log('Started infiltration ' + count);
                 ns.tprint('Started infiltration ' + count);
-                ns.toast('Started infiltration ' + count + " Successful: " + successful);
                 await startInfiltration(ns, companyToInfiltrate);
-                await ns.sleep(2000);
+                await ns.sleep(500);
             }
         }
         catch (error) {
@@ -235,6 +235,14 @@ export async function main(ns) {
             await ns.sleep(2000);
         }
     }
+}
+function timeTakenInSeconds(startDate, endDate) {
+    const startTime = startDate.getTime();
+    const endTime = endDate.getTime();
+    const timeDifferenceInMilliseconds = endTime - startTime;
+    const timeDifferenceInSeconds = Math.floor(timeDifferenceInMilliseconds / 1000);
+
+    return timeDifferenceInSeconds;
 }
 function invokeMouseDownEvent(targetElement) {
     if (!targetElement) {
