@@ -1,6 +1,6 @@
 /** Run this script on your home machine. It will run in a loop to fetch all the servers in the network
  *  analyze them. Figure out which ones can be hacked and which can be used to hack. Then spreads the scripts around
- *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are ran to not overlap. It's moneymaking optimal. Not sure if exp making optimal.
+ *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are run to not overlap. It's moneymaking optimal. Not sure if exp making optimal.
  * @param {NS} ns */
 export async function main(ns) {
   ns.disableLog('ALL');
@@ -15,8 +15,6 @@ export async function main(ns) {
   //3. sort them by how easy it is to hack them
   //4. calculate the overall amount of available threads worldwide for load distribution
   //5. iterate, execute the script which fits the most and save information on the currently executed process and amount of threads
-  let openablePorts;// = numberOfPortsOpenable(ns);
-  let playerHackingLevel;// = ns.getHackingLevel();
 
   // contains ALL the servers on the network
   let allServers = {
@@ -25,11 +23,7 @@ export async function main(ns) {
       let totalRunnableScriptThreads = 0;
       for (const server in this) {
         if (this.hasOwnProperty(server) && typeof this[server] === 'object') {
-          if (this[server].hackability &&
-            typeof this[server].hackability.runnableScriptThreads === 'number' &&
-            this[server].hackability.portsRequired <= openablePorts &&
-            this[server].hackability.requiredHackingLevel <= playerHackingLevel
-          )
+          if (this[server].canExecute)
             totalRunnableScriptThreads += this[server].hackability.runnableScriptThreads;
         }
       }
@@ -39,12 +33,8 @@ export async function main(ns) {
       const hackable = {};
       for (const server in this) {
         if (this.hasOwnProperty(server) && typeof this[server] === 'object') {
-          if (this[server].hack &&
-            this[server].hackable &&
-            this[server].hackability.portsRequired <= openablePorts &&
-            this[server].hackability.requiredHackingLevel <= playerHackingLevel) {
+          if (this[server].hackable)
             hackable[server] = this[server];
-          }
         }
       }
       return hackable;
@@ -102,10 +92,7 @@ export async function main(ns) {
       const executing = {};
       for (const server in this) {
         if (this.hasOwnProperty(server) && typeof this[server] === 'object') {
-          if (this[server].hack &&
-            this[server].hackability.maxRam > 0 &&
-            this[server].hackability.portsRequired <= openablePorts &&
-            this[server].hackability.requiredHackingLevel <= playerHackingLevel) {
+          if (this[server].canExecute) {
             executing[server] = this[server];
           }
         }
@@ -116,7 +103,7 @@ export async function main(ns) {
         let threadsFound = 0;
         while (threadsToFullfill > threadsFound) {
           const keys = Object.keys(this);
-          if (keys.length == 1)
+          if (keys.length == 2) // maybe this can be done better - we need to skip functions
             break;
           const firstKey = keys[0];
 
@@ -130,6 +117,15 @@ export async function main(ns) {
         }
         return pool;
       }
+      executing.totalRunnableScriptThreads = function () {
+        let totalRunnableScriptThreads = 0;
+        for (const server in this) {
+          if (this.hasOwnProperty(server) && typeof this[server] === 'object') {
+            totalRunnableScriptThreads += this[server].hackability.runnableScriptThreads;
+          }
+          return totalRunnableScriptThreads;
+        }
+      }
       return executing;
     },
   }
@@ -140,32 +136,24 @@ export async function main(ns) {
         let now = new Date();
         let scripts = this[server];
         for (const script in scripts) {
-          let s = scripts[script];
-          if (s.endsAt <= now)
+          if (scripts[script].endsAt <= now)
             delete scripts[script]
         }
       }
     }
   }
-  let visited = [];
-
   while (true) {
-    await recursive_scan(ns, 'home', visited = []);
+    let visited = [];
+    await recursive_scan(ns, 'home', visited);
     runningScripts.cleanup();
-    openablePorts = numberOfPortsOpenable(ns);
-    playerHackingLevel = ns.getHackingLevel();
+    const openablePorts = numberOfPortsOpenable(ns);
 
     // scan all servers
     for (const serv of visited) {
-      allServers[serv] = analyzeServer(ns, serv, runningScripts);
+      allServers[serv] = analyzeServer(ns, serv, runningScripts, openablePorts);
     }
-
-    const runnableScriptThreads = allServers.runnableScriptThreads();
-    const sorted = allServers.hackableSortedByHackingLevel();
-    const execServers = allServers.executingServers();
-
     // lets run
-    await run_script(ns, runningScripts, execServers, sorted, runnableScriptThreads);
+    await run_script(ns, runningScripts, allServers.executingServers(), allServers.hackableSortedByHackingLevel(), allServers.runnableScriptThreads());
     await ns.sleep(200);
   }
 }
@@ -176,7 +164,7 @@ export async function main(ns) {
  * @param {Hash<ServerAnalysis>} hackableServers Server to search through
  * @param {number} runnableScriptThreads Threads Server to search through
 */
-export async function run_script(ns, runningScripts, execServers, hackableServers, runnableScriptThreads) {
+export async function run_script(ns, runningScripts, execServers, hackableServers) {
   //0. based on the available threads, we need to see how many hacks we can run
   //1. check which script to run based on current security level and money available
   //2. run the script saving info when was it ran and how much time should it be executed.. 
@@ -184,7 +172,7 @@ export async function run_script(ns, runningScripts, execServers, hackableServer
   //3. here's the tricky part: we could try to estimate and overlap the next hack/weaken/growth cycles
   //   this can be calculated somewhat like: if weaken is running for 20 seconds and hack will take 10 seconds
   //   run the hack after the 10 seconds of the weaken run.. same aplies to the next grow cycle
-  let threadsLeft = runnableScriptThreads;
+  let threadsLeft = execServers.totalRunnableScriptThreads();
   while (threadsLeft > 0) {
     const serverToHack = hackableServers.shift();
     if (!serverToHack || !serverToHack.name || serverToHack.name == '') break;
@@ -239,7 +227,7 @@ export async function recursive_scan(ns, serv, visited) {
  * @param {string} serv Server to search through
  * @param {string} runningScripts Currently running scripts
  * */
-export function analyzeServer(ns, target, runningScripts) {
+export function analyzeServer(ns, target, runningScripts, openablePorts) {
   let moneyMax = ns.getServerMaxMoney(target);
   let moneyAvailable = ns.getServerMoneyAvailable(target);
   let growthThreads = 0;
@@ -285,6 +273,8 @@ export function analyzeServer(ns, target, runningScripts) {
       else recommendedScript = 'hack';
     }
   }
+  let running = runningScripts[target];
+
   let requiredThreads;
   let runTime;
   switch (recommendedScript) {
@@ -303,7 +293,9 @@ export function analyzeServer(ns, target, runningScripts) {
   };
   const analysis = new ServerAnalysis();
   analysis.name = target;
-  analysis.hackable = moneyMax != 0;
+  // not sure this is correct
+  analysis.canExecute = target == 'home' || target.includes('pserv') || (ns.getServerNumPortsRequired(target) <= openablePorts && ns.getServerMaxRam(target) > 0);
+  analysis.hackable = moneyMax != 0 && ns.getServerNumPortsRequired(target) <= openablePorts && requiredHackingLevel <= ns.getHackingLevel();
   analysis.weaken = {
     time: timeWeaken,
     threadsToWeakenToMin: weakenThreads,
@@ -419,5 +411,6 @@ class ServerAnalysis {
     this.recommended = {};
     this.name = 'Server name';
     this.hackable = false;
+    this.canExecute = false;
   };
 }
