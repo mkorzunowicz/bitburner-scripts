@@ -3,17 +3,10 @@ const doc = wnd["document"];
 /** @param {NS} ns */
 export async function main(ns) {
   let force = ns.args[0];
-  // co ja tu mogę chcieć?
-  // 1. na początku po złamaniu BitNode'a albo od augmentacji zaczynamy z uniwerkiem
-  // 2. mozna to do ulti spreada dodać żeby uruchomił, albo lepiej niech to uruchomi ulti spread
-  // 3. mozna dodać rozwój home'a o ram do jakichś 15b
-  // 4. można potem napierdzielać jakąś pracę w frakcji (Sector-12, Security work) żeby dobić do ~50 statsów żeby zacząć homicidey (moż da się sprawdzić ile jest ) - klepać karmę do 54000 dla gangusów
-  // 5. jak już będzie 54000 to założyć gang - dalej automatyzacja gangowa, ale przede wszystkim mamy dostęp do wielu augmentacji
-  // 6. założyć corpo?
 
   let shouldRun = true;
 
-  // we want to make sure we can cancel this loop by pressing ESC
+  // cancel this loop by pressing ESC
   function handleEscapeKey(event) {
     if (event.key === 'Escape' || event.keyCode === 27) {
       shouldRun = false;
@@ -33,79 +26,41 @@ export async function main(ns) {
   const startDate = new Date();
   // Augmentations will get installed in bulk of 10
   let runNumber = ns.singularity.getOwnedAugmentations().length / 10;
-  if (ns.exec("infi.js", 'home') != 0)
-    ns.tprint("Infiltration automated.");
-  else
-    ns.tprint("ERROR Couldn't automate infiltration!!!");
 
-  if (!ns.isRunning("ultimate_spread.js", 'home', 'noexpand'))
-    if (ns.exec("ultimate_spread.js", 'home', 1, 'noexpand') != 0)
-      ns.tprint("Spreading...");
-    else
-      ns.tprint("ERROR Couldn't start spread loop!!!");
-
-  if (!ns.isRunning("backdoor_loop.js", 'home'))
-    if (ns.exec("backdoor_loop.js", 'home') != 0)
-      ns.tprint("Backdooring looped...");
-    else
-      ns.tprint("ERROR Couldn't start backdooring loop!!!");
+  if (startScript(ns, "infi.js")) ns.tprint("Infiltration automated.");
+  if (startScript(ns, "stats.js")) ns.tprint("Stats overview enchanced.");
+  if (startScript(ns, "backdoor_loop.js")) ns.tprint("Backdooring...");
+  if (startScript(ns, "homigrind_loop.js")) ns.tprint("Grinding karma...");
+  if (startScript(ns, "ultimate_spread.js", 'noexpand')) ns.tprint("Spreading...");
 
   //  this shouldn't be really needed - this script must be executed at the very beginning after restart
   if (force || pl.playtimeSinceLastAug < 100000) {
-
-    // let's learn some hacking at first
-    if (ns.singularity.universityCourse('Rothman University', 'Algorithms course', false))
-      ns.tprint("Starting Alghoritms course");
-    else
-      ns.tprint("ERROR Couldn't start learning Algorithms !!!");
-
-    if (ns.exec("homigrind_loop.js", 'home', 1, 'noprompt') != 0)
-      ns.tprint("Started grinding karma");
-    else
-      ns.tprint("ERROR Couldn't start grinding homicide!!!");
-
-
     // One infiltration run of MegaCorp to gain some init money before we can travel to Aevum for ECorp grinding
     await infiltrate(ns, 'MegaCorp', 1, 'none');
     ns.tprint("Initial MegaCorp infiltration ended.");
 
-    ns.singularity.upgradeHomeRam();
-    ns.singularity.upgradeHomeRam();
-    ns.singularity.upgradeHomeRam();
-    ns.singularity.upgradeHomeRam();
-
     ns.singularity.joinFaction('Shadows of Anarchy');
 
-    ns.singularity.purchaseTor();
-    ns.singularity.purchaseProgram('BruteSSH.exe');
-    ns.singularity.purchaseProgram('FTPCrack.exe');
-    ns.singularity.purchaseProgram('relaySMTP.exe');
-    ns.singularity.purchaseProgram('HTTPWorm.exe');
-    ns.singularity.purchaseProgram('SQLInject.exe');
+    buyApps(ns);
 
-    ns.tprint("Tor and hack programs purchased");
-
-    if (!ns.isRunning("expand_servers.js", 'home', 'noprompt')) {
-      expandPid = ns.exec("expand_servers.js", 'home', 1, 'noprompt');
-      if (expandPid != 0)
-        ns.tprint("Started server expand loop");
-      else
-        ns.tprint("ERROR Couldn't start expand loop!!!");
-    }
+    expandServers(ns);
     await infiltrate(ns, 'ECorp', 3, 'none'); // just grind some more to upgrade servers and increase Hack level
+
+    Array.from({ length: 4 }, () => ns.singularity.upgradeHomeRam());
 
     if (runNumber == 0) {
       //  this must be installed asap so that infiltration is more profitable, but it's cheap so better to move it to end of first run
       ns.singularity.purchaseAugmentation('Shadows of Anarchy', 'SoA - phyzical WKS harmonizer');
-
     }
+    Array.from({ length: 4 }, () => ns.singularity.upgradeHomeRam());
   }
-  // WARNING: THE BACKDOOR LOOP DOESN'T INVOKE FACTION INVITES FOR WHATEVER REASON, SO WE STILL NEED TO BACKDOOR THE HACKING FACTIONS BY HAND!!!
-  const infiInfo = infiltrationInfo(ns);
+
+  buyApps(ns);
 
   while (ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < 8 && shouldRun) {
+    // while ((pl.factions.includes('Daedalus') && !ns.singularity.getOwnedAugmentations(true).includes('The Red Pill')) || ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < 8 && shouldRun) {
     // so we grind until we install 10 new augmentations.. backdoor on world deamon maybe gets installed automatically :D
-    pl = ns.getPlayer();
+
     let invites = ns.singularity.checkFactionInvitations();
     for (const factionname of invites) {
       if (runNumber > 2 && ['Sector-12', 'Aevum'].includes(factionname)) continue;
@@ -150,74 +105,36 @@ export async function main(ns) {
       console.log('Grinding money not to sit around idle!!!!');
       await infiltrate(ns, 'ECorp', 1, 'none'); // let's not idle
       await ns.sleep(1000);
+      pl = ns.getPlayer();
       continue;
     }
     // let's stop the server expansion for now cause we want to save money for augments
-    if (expandPid && ns.isRunning(expandPid)) {
-      ns.kill(expandPid);
-    }
-    let factionRep = ns.singularity.getFactionRep(best.faction);
-    if (best.repreq > factionRep) {
+    // if (expandPid && ns.isRunning(expandPid)) {
+    //   ns.kill(expandPid);
+    // }
 
-      // figure out the number of times and/or target  we need to run the faction grind
-      let whatToGrind = fulfillRequestedReputation(infiInfo, best.repreq - factionRep);
-
-      const company = whatToGrind[0].company;
-      const times = whatToGrind[0].times;
-      debugger;
-      let msg = `Grinding rep on: ${company} ${times} times to buy ${best.aug} in ${best.faction}`;
-      console.log(msg);
-      ns.tprint(msg);
-      if (whatToGrind.length > 1)//hack before i add it to the method, instead of running the for loop
-        times += 1;
-
-      await infiltrate(ns, company, times + 1, best.faction);
-
-    }
-    if (best.price > pl.money) {
-      let whatToGrind = fulfillRequestedMoney(infiInfo, best.price - pl.money);
-      const company = whatToGrind[0].company;
-      const times = whatToGrind[0].times;
-
-      let msg = `Grinding money on: ${company} ${times} times to buy ${best.aug} in ${best.faction}`;
-      console.log(msg);
-      ns.tprint(msg);
-      if (whatToGrind.length > 1)//hack before i add it to the method, instead of running the for loop
-        times += 1;
-      await infiltrate(ns, company, times, 'none');
-    }
-
-    // debugger;
-    let bought = ns.singularity.purchaseAugmentation(best.faction, best.aug);
-    if (bought) {
-      let msg = `Augmentation ${best.aug} in ${best.faction} bought.`;
-      console.log(msg);
-      ns.tprint(msg);
-    }
-    else
-      ns.tprint(`ERROR Couldn't buy augmentation: ${best.aug} in ${best.faction}`);
+    await grindRep(ns, best);
+    await grindMoney(ns, best);
+    buyAugmentation(ns, best);
 
     await ns.sleep(1000);
+    pl = ns.getPlayer();
+  }
+
+  for (const factionname of ns.singularity.checkFactionInvitations()) {
+    ns.singularity.joinFaction(factionname);
   }
 
   let leftoverAugmentation;
   while ((leftoverAugmentation = findAugmentationToBuy(ns, pl.money, false, false)) && shouldRun) {
 
-    // debugger;
-    // if we still have money to buy any hack augmentations and we have the rep for it, buy them
-    let bought = ns.singularity.purchaseAugmentation(leftoverAugmentation.faction, leftoverAugmentation.aug);
-    if (bought) {
-      let msg = `Augmentation ${leftoverAugmentation.aug} in ${leftoverAugmentation.faction} bought.`;
-      console.log(msg);
-      ns.tprint(msg);
-    }
-    else
-      ns.tprint(`ERROR Couldn't install augmentation: ${leftoverAugmentation.aug} in ${leftoverAugmentation.faction}`);
-    pl = ns.getPlayer();
-    await ns.sleep(1000);
-  }
+    // if we still have money to buy any hack augmentations.. but can grind rep
+    await grindRep(ns, leftoverAugmentation);
+    buyAugmentation(ns, leftoverAugmentation);
 
-  // maybe we can buy the pill already?
+    await ns.sleep(1000);
+    pl = ns.getPlayer();
+  }
 
   const msg = `Augments installed. Run took: ${timeTakenInSeconds(startDate, new Date())}s`;
   console.log(msg);
@@ -225,9 +142,12 @@ export async function main(ns) {
   ns.singularity.installAugmentations('singl.js');
 }
 
+let infiInfo;
 /** @param {NS} ns */
 function infiltrationInfo(ns) {
-  let infiInfo = {}
+  if (infiInfo) return infiInfo;
+
+  infiInfo = {}
   let infiLocations = ns.infiltration.getPossibleLocations();
 
   for (const loc in infiLocations) {
@@ -235,6 +155,55 @@ function infiltrationInfo(ns) {
     infiInfo[l.name] = ns.infiltration.getInfiltration(l.name);
   }
   return infiInfo;
+}
+
+/** @param {NS} ns */
+function buyAugmentation(ns, aug) {
+  let msg;
+  let bought = ns.singularity.purchaseAugmentation(aug.faction, aug.aug);
+  if (bought) {
+    msg = `Augmentation ${aug.aug} in ${aug.faction} bought for ${ns.nFormat(aug.price, "0.0a")}`;
+  }
+  else {
+    msg = `ERROR Couldn't buy augmentation: ${aug.aug} in ${aug.faction}`;
+  }
+  console.log(msg);
+  ns.tprint(msg);
+}
+
+async function grindRep(ns, aug) {
+  let factionRep = ns.singularity.getFactionRep(aug.faction);
+  if (aug.repreq > factionRep) {
+
+    // figure out the number of times and/or target  we need to run the faction grind
+    let whatToGrind = fulfillRequestedReputation(infiltrationInfo(ns), aug.repreq - factionRep);
+    const company = whatToGrind[0].company;
+    const times = whatToGrind[0].times;
+
+    if (whatToGrind.length > 1)//hack before i add it to the method, instead of running the for loop
+      times += 1;
+
+    await grindInfiltration(ns, aug, company, times, aug.faction);
+  }
+}
+
+async function grindMoney(ns, aug) {
+  let pl = ns.getPlayer();
+  if (aug.price > pl.money) {
+    let whatToGrind = fulfillRequestedMoney(infiltrationInfo(ns), aug.price - pl.money);
+    const company = whatToGrind[0].company;
+    const times = whatToGrind[0].times;
+
+    if (whatToGrind.length > 1)//hack before i add it to the method, instead of running the for loop
+      times += 1;
+    await grindInfiltration(ns, aug, company, times, 'none');
+  }
+}
+async function grindInfiltration(ns, aug, company, times, faction) {
+  let msg = `Grinding ${faction == 'none' ? 'money' : 'rep'} on: ${company} ${times} times to buy ${aug.aug} in ${aug.faction}`;
+  console.log(msg);
+  ns.tprint(msg);
+  await infiltrate(ns, company, times, faction);
 }
 
 function fulfillRequestedReputation(infi_info, requestedReputation) {
@@ -265,6 +234,7 @@ function fulfillRequestedReputation(infi_info, requestedReputation) {
     const timesToWork = Math.ceil(remainingReputation / tradeRep);
 
     if (timesToWork > 0) {
+      debugger;
       optimalCompanies.push({ company: name, times: timesToWork });
       remainingReputation -= timesToWork * tradeRep;
     }
@@ -302,6 +272,7 @@ function fulfillRequestedMoney(infi_info, requestedMoney) {
     const timesToWork = Math.ceil(remainingMoney / money);
 
     if (timesToWork > 0) {
+      debugger;
       optimalCompanies.push({ company: name, times: timesToWork });
       remainingMoney -= timesToWork * money;
     }
@@ -348,7 +319,8 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
       const entry = augDict[faction][aug];
       const { hacking_chance, hacking_speed, hacking_money, hacking_grow, hacking, hacking_exp } = entry.multis;
       // if moneyAvailable provided lets limit only to the ones buyable and where rep is high enough
-      if (moneyAvailable && (moneyAvailable < entry.price || ns.singularity.getFactionRep(faction) < entry.repreq)) continue;
+      if (moneyAvailable && (moneyAvailable < entry.price)) continue;
+      // if (moneyAvailable && (moneyAvailable < entry.price || ns.singularity.getFactionRep(faction) < entry.repreq)) continue;
       if (!entry.prereq.every(e => owned.includes(e))) continue; // we want to own all the prereqs
       if (hackingOnly && !(hacking_chance > 1 || hacking_speed > 1 || hacking_money > 1 || hacking_grow > 1 || hacking > 1 || hacking_exp > 1)) continue;
 
@@ -369,13 +341,13 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
 }
 
 /** @param {NS} ns */
-function grindCombatForHomicide(ns, faction) {
-  if (ns.isRunning("homigrind_loop.js", 'home', faction)) {
+function grindCombatForHomicide(ns) {
+  if (ns.isRunning("homigrind_loop.js", 'home')) {
     ns.tprint("Grinding homicide already running..");
     return;
   }
 
-  const infiPid = ns.exec("homigrind_loop.js", 'home', 1, faction);
+  const infiPid = ns.exec("homigrind_loop.js", 'home', 1);
   if (infiPid != 0)
     ns.tprint("Grinding homicide to start a gang..");
   else
@@ -383,7 +355,56 @@ function grindCombatForHomicide(ns, faction) {
 }
 
 /** @param {NS} ns */
+function expandServers(ns) {
+  if (!ns.isRunning("expand_servers.js", 'home', 'noprompt') || !ns.isRunning("upgrade_servers.js", 'home'))
+    if (startScript(ns, "expand_servers.js", 'noprompt')) ns.tprint("Started server expand loop");
+}
+
+function startScript(ns, scriptName, param) {
+  if (param) {
+    if (!ns.isRunning(scriptName, 'home', param)) {
+      if (ns.exec(scriptName, 'home', 1, param) != 0)
+        return true;
+    }
+    else return true;
+  }
+  else if (!ns.isRunning(scriptName, 'home')) {
+    if (ns.exec(scriptName, 'home', 1) != 0)
+      return true;
+
+    ns.tprint(`ERROR Couldn't start ${scriptName}!!!`);
+    return false;
+  }
+  else return true;
+}
+
+function stopScript(ns, scriptName, param) {
+  if (!ns.isRunning(scriptName, 'home', 'noprompt')) {
+    expandPid = ns.exec(scriptName, 'home', 1, 'noprompt');
+    if (expandPid != 0)
+      ns.tprint("Started server expand loop");
+    else
+      ns.tprint("ERROR Couldn't start expand loop!!!");
+  }
+}
+
+/** @param {NS} ns */
+function buyApps(ns) {
+  if (ns.singularity.purchaseTor()) {
+    ns.singularity.purchaseProgram('BruteSSH.exe');
+    ns.singularity.purchaseProgram('FTPCrack.exe');
+    ns.singularity.purchaseProgram('relaySMTP.exe');
+    ns.singularity.purchaseProgram('HTTPWorm.exe');
+    ns.singularity.purchaseProgram('SQLInject.exe');
+
+    ns.tprint("Tor and hack programs purchased");
+  }
+}
+
+/** @param {NS} ns */
 async function infiltrate(ns, target, times, faction) {
+  if (ns.getPlayer().hp.current < ns.getPlayer().hp.max)
+    ns.singularity.hospitalize();
   const infiPid = ns.exec("infi_loop.js", 'home', 1, target, times, faction, 'dontGrind');
   if (infiPid != 0)
     ns.tprint(target + " infiltration started...");
