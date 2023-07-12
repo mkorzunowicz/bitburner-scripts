@@ -32,7 +32,7 @@ let auto = false
 let repFaction = ''
 
 // Speed of game actions, in milliseconds.
-const speed = 25;
+const speed = 15;
 
 // Time infiltration(s)
 let infiltrationStart = 0
@@ -47,6 +47,36 @@ const doc = wnd["document"];
 const infiltrationGames = [
   {
     name: "type it backward",
+    init: function (screen) {
+      const lines = getLines(getEl(screen, "p"));
+      state.game.data = lines[0].split("");
+    },
+    play: function (screen) {
+      if (!state.game.data || !state.game.data.length) {
+        delete state.game.data;
+        return;
+      }
+
+      pressKey(state.game.data.shift());
+    },
+  },
+  {
+    name: "type it backward",
+    init: function (screen) {
+      const lines = getLines(getEl(screen, "p"));
+      state.game.data = lines[0].split("");
+    },
+    play: function (screen) {
+      if (!state.game.data || !state.game.data.length) {
+        delete state.game.data;
+        return;
+      }
+
+      pressKey(state.game.data.shift());
+    },
+  },
+  {
+    name: "type it",
     init: function (screen) {
       const lines = getLines(getEl(screen, "p"));
       state.game.data = lines[0].split("");
@@ -154,7 +184,7 @@ const infiltrationGames = [
   // },
   {
     name: "say something nice about the guard",
-    init: function (screen) { state.game.data = 'running'},
+    init: function (screen) { state.game.data = 'running' },
     play: function (screen) {
       const correct = [
         "affectionate",
@@ -481,6 +511,7 @@ export async function main(ns) {
 
   if (wnd.tmrAutoInf) {
     print("Stopping automated infiltration...");
+    unwrapEventListeners();
     clearInterval(wnd.tmrAutoInf);
     delete wnd.tmrAutoInf;
   }
