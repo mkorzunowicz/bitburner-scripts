@@ -1,31 +1,40 @@
-// import { getNsDataThroughFile as fetch } from './helpers.js'
 
 /**
  * @param {NS} ns
  **/
 export async function main(ns) {
+  ns.disableLog('ALL');
   const doc = eval('document')
   const hook0 = doc.getElementById('overview-extra-hook-0')
   const hook1 = doc.getElementById('overview-extra-hook-1')
-  if ( !hook0 || !hook1 ) {
+  if (!hook0 || !hook1) {
     return
   }
-  // hook0.innerText = "Hashes\nStock\nScrInc\nScrExp"
-  hook0.innerText = "Income\nExper.\nKarma"
+  while (true) {
+    let hasTor = ns.hasTorRouter();
 
-  // const hashes = await getNsDataThroughFile(ns, '[ns.hacknet.numHashes(), ns.hacknet.hashCapacity()]', '/Temp/hash-stats.txt')
-  // const stkSymbols = await getNsDataThroughFile(ns, `ns.stock.getSymbols()`, '/Temp/stock-symbols.txt');
-  // const stkPortfolio = await getNsDataThroughFile(ns, JSON.stringify(stkSymbols) +
-  //   `.map(sym => ({ sym, pos: ns.stock.getPosition(sym), ask: ns.stock.getAskPrice(sym), bid: ns.stock.getBidPrice(sym) }))` +
-  //   `.reduce((total, stk) => total + stk.pos[0] * stk.bid + stk.pos[2] * (stk.ask * 2 - stk.bid), 0)`,
-  //   '/Temp/stock-portfolio-value.txt')
-  // hook1.innerText =
-  //   `${formatNumberShort(hashes[0], 3, 0)}/${ns.nFormat(hashes[1], 3, 0)}` +
-  //   `\n${formatMoney(stkPortfolio)}` +
-  //   `\n${ns.nFormat(ns.getScriptIncome()[0], '$0,0')}/s` +
-  //   `\n${ns.nFormat(ns.getScriptExpGain(), 3, 2)}/s`
-  hook1.innerText =
-    `${ns.nFormat(ns.getScriptIncome()[0], "$0.0a")}/s` +
-    `\n${ns.nFormat(ns.getScriptExpGain(), "0.0a")}/s` +
-    `\n${ns.nFormat(ns.heart.break(), "0.0a")}`
+    hook0.innerText = "Income\nExper.\nKarma"
+    hook1.innerText =
+      `${ns.nFormat(ns.getScriptIncome('ultimate_spread.js', 'home', 'noexpand'), "$0.0a")}/s` +
+      // `${ns.nFormat(ns.getScriptIncome()[0], "$0.0a")}/s` +
+      `\n${ns.nFormat(ns.getScriptExpGain('ultimate_spread.js', 'home', 'noexpand'), "0.0a")}/s` +
+      `\n${ns.nFormat(ns.heart.break(), "0.0a")}`
+
+    if (!hasTor) {
+      hook0.innerText += "\nTor";
+      hook1.innerText += "\nNO";
+    }
+
+
+    hook0.innerText += "\nUpgrading";
+    if (ns.isRunning('upgrade_servers.js'))
+      hook1.innerText += "\nYES";
+    else
+      hook1.innerText += "\nNO";
+      
+      hook0.innerText += "\nAugs";
+      hook1.innerText += `\n${ns.singularity.getOwnedAugmentations().length} (${ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length})`;
+    
+    await ns.sleep(1000);
+  }
 }
