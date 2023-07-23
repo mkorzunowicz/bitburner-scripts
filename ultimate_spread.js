@@ -3,12 +3,16 @@
  *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are run to not overlap. It's moneymaking optimal. Not sure if exp making optimal.
  * @param {NS} ns */
 export async function main(ns) {
+
+  let noExpand = ns.args[0];
   ns.disableLog('ALL');
   // ns.killall('home');
   // if (!ns.isRunning("expand_servers.js")) {
-  const expandPid = ns.exec("expand_servers.js", 'home');
-  if (expandPid != 0)
-    ns.tprint("Started server expand loop");
+  if (!noExpand) {
+    const expandPid = ns.exec("expand_servers.js", 'home');
+    if (expandPid != 0)
+      ns.tprint("Started server expand loop");
+  }
   // }
   //1. analyze all servers for hack/grow/weaken information along with possibility to hack it and times it would take
   //2. at first filter out those that don't fit our level or amount of ports openable
@@ -55,7 +59,7 @@ export async function main(ns) {
 
       return sortedHash;
     },
-    hackableSortedByName() {
+    hackableSortedByByName() {
       const hackable = this.hackableServers();
       const sortedHash = {};
       const keys = Object.keys(hackable);
@@ -181,7 +185,7 @@ export async function main(ns) {
     }
     // lets run
     // await run_script(ns, runningScripts, allServers.executingServers(), allServers.hackableSortedByHackingLevel(), allServers.runnableScriptThreads());
-    await run_script(ns, runningScripts, allServers.executingServers(), allServers.hackableSortedByName());
+    await run_script(ns, runningScripts, allServers.executingServers(), allServers.hackableSortedByByName());
     await ns.sleep(50);
   }
 }
@@ -298,18 +302,19 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
   let usedRam = ns.getServerUsedRam(target);
   let maxRam = ns.getServerMaxRam(target);
   let availableRam = maxRam - usedRam;
-  if (target == 'home') availableRam -= 35; // just to save some space for other scripts
+  if (target == 'home') availableRam -= 200; // just to save some space for other scripts
 
   let requiredThreads;
   let runTime;
-  let recommendedScript = 'skip';
+  let recommendedScript = 'hack';
   if (runningScripts && runningScripts.length > 0 && runningScripts[runningScripts.length - 1]) {
     const lastScript = runningScripts[runningScripts.length - 1];
     let willEndAt;
     switch (lastScript.type) {
       case 'weaken':
         willEndAt = new Date(new Date().getTime() + timeHack);
-        if (willEndAt > lastScript.endsAt) {
+        // if (willEndAt > lastScript.endsAt) 
+        {
           recommendedScript = 'hack';
           requiredThreads = hackThreads;
           runTime = timeHack;
@@ -317,7 +322,8 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
         break;
       case 'hack':
         willEndAt = new Date(new Date().getTime() + timeGrowth);
-        if (willEndAt > lastScript.endsAt) {
+        // if (willEndAt > lastScript.endsAt) 
+        {
           recommendedScript = 'grow';
           requiredThreads = growthThreads;
           runTime = timeGrowth;
@@ -325,7 +331,8 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
         break;
       case 'grow':
         willEndAt = new Date(new Date().getTime() + timeWeaken);
-        if (willEndAt > lastScript.endsAt) {
+        // if (willEndAt > lastScript.endsAt) 
+        {
           recommendedScript = 'weaken';
           // got to calculate the security increase after the previous hack and grow
           let secLevelIncrease = securityDiff;
@@ -333,8 +340,11 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
             secLevelIncrease += securityIncreaseOnHack;
           if (securityIncreaseOnGrowth != Infinity)
             secLevelIncrease += securityIncreaseOnGrowth;
-
+          // if (Infinity == secLevelIncrease)
+          //   requiredThreads = 1;
+          // else
           requiredThreads = threadsToWeaken(ns, secLevelIncrease);
+          // requiredThreads = threadsToWeakenAfterHackAndGrow;
           runTime = timeWeaken;
         }
         break;
@@ -369,6 +379,7 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
   analysis.name = target;
   // not sure this is correct
   analysis.canExecute = target == 'home' || target.includes('pserv') || (ns.getServerNumPortsRequired(target) <= openablePorts && ns.getServerMaxRam(target) > 0);
+  // analysis.hackable = moneyMax != 0 && ns.getServerNumPortsRequired(target) <= openablePorts && requiredHackingLevel <= ns.getHackingLevel();
   analysis.hackable = moneyMax != 0 && ns.getServerNumPortsRequired(target) <= openablePorts && requiredHackingLevel <= ns.getHackingLevel() && recommendedScript != 'skip';
   analysis.weaken = {
     time: timeWeaken,

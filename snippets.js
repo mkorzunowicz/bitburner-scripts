@@ -14,11 +14,13 @@ alias -g backd="run jumpbd.js"
 alias -g tracert="home;run tracert.js"
 alias -g jump="home;run jump.js"
 
-alias -g spread="home;run spread_better.js"
+alias -g spread="home;run ultimate_spread.js"
 
 alias -g autoinfi="home;run infi.js"
 alias -g moneyinfi="home;run infi_loop.js"
 alias -g repinfi="home;run infi_loop.js all"
+
+alias -g start="home;run starter.js"
 
 //hackall
 backd CSEC 
@@ -42,5 +44,15 @@ run infi_loop.js "ECorp" 1 "Tian Di Hui"
 run infi_loop.js "ECorp" 5 "CyberSec"
 
 moneyinfi "ECorp" 2 "The Black Hand"
+moneyinfi "Fulcrum Technologies" 3 "Aevum"
+moneyinfi "Fulcrum Technologies" 1 "CyberSec"
+moneyinfi "ECorp" 1 "Sector-12"
+moneyinfi "ECorp" 10 "BitRunners"
+moneyinfi "ECorp" 1 "Slum Snakes"
+moneyinfi "ECorp" 15 "Daedalus"
+
+
+
+moneyinfi "Noodle Bar" 1 "BitRunners"
 
 }

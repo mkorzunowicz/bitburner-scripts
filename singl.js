@@ -2,6 +2,10 @@ const wnd = eval("window");
 const doc = wnd["document"];
 /** @param {NS} ns */
 export async function main(ns) {
+  // const resetInfo = ns.getResetInfo(); const lastAugReset = resetInfo.lastAugReset; ns.tprint(`The last augmentation reset was: ${new Date(lastAugReset)}`); ns.tprint(`It has been ${Date.now() - lastAugReset}ms since the last augmentation reset.`);
+
+  ns.disableLog('ALL');
+  const augsPerRun = 8;
   let force = ns.args[0];
   let shouldRun = true;
   // cancel this loop by pressing ESC
@@ -17,43 +21,52 @@ export async function main(ns) {
     doc.removeEventListener('keydown', handleEscapeKey);
   });
 
+  let prioFactions = [];
   let expandPid;
   let pl = ns.getPlayer();
   const startDate = new Date();
   // Augmentations will get installed in bulk of 10
-  let runNumber = ns.singularity.getOwnedAugmentations().length / 10;
+  let runNumber = ns.singularity.getOwnedAugmentations().length / augsPerRun;
 
-  if (startScript(ns, "infi.js")) log(ns, "Infiltration automated.");
-  startScript(ns, "stats.js")
+  // if (startScript(ns, "infi.js")) log(ns, "Infiltration automated.");
+  // startScript(ns, "stats.js")
   if (startScript(ns, "backdoor_loop.js")) log(ns, "Backdooring...");
   if (startScript(ns, "homigrind_loop.js")) log(ns, "Grinding karma...");
   if (startScript(ns, "ultimate_spread.js", 'noexpand')) log(ns, "Spreading...");
 
   //  this shouldn't be really needed - this script must be executed at the very beginning after restart
-  if (force || pl.playtimeSinceLastAug < 1000000) {
+  // if (force || pl.playtimeSinceLastAug < 100000 || pl.money < 100000000 || !ns.hasTorRouter()) {
+  if (force || !ns.hasTorRouter()) {
     // One infiltration run of MegaCorp to gain some init money before we can travel to Aevum for ECorp grinding
-    if (ns.singularity.travelToCity('Aevum'))
-      await infiltrate(ns, 'ECorp', 1, 'none');
-    else
-      await infiltrate(ns, 'MegaCorp', 1, 'none');
-    log(ns, 'Running pre intro infiltration', 'info', 70000);
-    ns.singularity.joinFaction('Shadows of Anarchy');
+    if (ns.getPlayer().money < 300000000) {
+      if (ns.singularity.travelToCity('Aevum'))
+        await infiltrate(ns, 'ECorp', 1, 'none');
+      else
+        await infiltrate(ns, 'MegaCorp', 1, 'none');
+      log(ns, 'Running pre intro infiltration', 'info', 70000);
+    }
 
+
+    if (ns.singularity.joinFaction('Shadows of Anarchy'))
+      log(ns, `Joined: ${'Shadows of Anarchy'}`, 'warning');
     buyApps(ns);
     expandServers(ns);
-
+    // split to allow different Factions to pop up
     if (runNumber < 2) {
       log(ns, 'Running American intro infiltrations', 'info', 80000 * 3);
-      await infiltrate(ns, 'ECorp', 3, 'none'); // just grind some more to upgrade servers and increase Hack level
+      prioFactions = ['Sector-12', 'Aevum']
+      await infiltrate(ns, 'ECorp', 3, 'none');
     }
-    if (runNumber < 6) {
+    if (runNumber < 7 && runNumber >= 2) {
       log(ns, 'Running Asian intro infiltrations', 'info', 80000 * 3);
+      prioFactions = ['Chongqing', 'Ishima', 'New Tokyo']
       await infiltrate(ns, 'KuaiGong International', 1, 'none');
-      await infiltrate(ns, 'VitaLife', 1, 'none'); 
+      await infiltrate(ns, 'VitaLife', 1, 'none');
       await infiltrate(ns, 'Storm Technologies', 1, 'none');
     }
-    if (runNumber < 9) {
+    if (runNumber < 12 && runNumber >= 7) {
       log(ns, 'Running European intro infiltrations', 'info', 80000 * 2);
+      prioFactions = ['Volhaven']
       await infiltrate(ns, 'OmniTek Incorporated', 2, 'none');
     }
     if (runNumber == 0) {
@@ -63,29 +76,43 @@ export async function main(ns) {
       Array.from({ length: 6 }, () => ns.singularity.upgradeHomeCores());
     }
   }
+  if (runNumber < 2) {
+    prioFactions = ['Sector-12', 'Aevum'];
+  }
+  else if (runNumber < 7 && runNumber >= 2) {
+    prioFactions = ['Chongqing', 'Ishima', 'New Tokyo'];
+  }
+  else if (runNumber < 12 && runNumber >= 7) {
+    prioFactions = ['Volhaven'];
+  }
+  if (runNumber < 5 && runNumber >= 3)
+    prioFactions.push('The Black Hand', 'CyberSec', 'NiteSec');
 
-
-  if (runNumber < 5) {
+  if (runNumber < 8) {
+    // if (ns.getPlayer().skills.hacking<5000) {
     if (ns.isRunning("upgrade_servers.js")) {
       ns.kill("upgrade_servers.js");
-      log(ns, 'Money spread is slow.. stopping upgrades', 'warning');
+      log(ns, 'Money grinding is slow.. stopping upgrades', 'warning');
     }
   }
-  while (ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < 8 && shouldRun) {
+  while (ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < augsPerRun && shouldRun) {
     // while ((pl.factions.includes('Daedalus') && !ns.singularity.getOwnedAugmentations(true).includes('The Red Pill')) || ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < 8 && shouldRun) {
-    // so we grind until we install 10 new augmentations.. backdoor on world deamon maybe gets installed automatically :D
+    // so we grind until we install 8 new augmentations.. backdoor on world deamon gets installed automatically in backdoor_loop.js
 
     startScript(ns, "backdoor_loop.js");
     let invites = ns.singularity.checkFactionInvitations();
     for (const factionname of invites) {
-      if (runNumber > 2 && ['Sector-12', 'Aevum'].includes(factionname)) continue;
+      if (runNumber > 2 && ['Sector-12', 'Aevum'].includes(factionname)) continue; // TODO: fix this based on prioFactions?
 
-      ns.singularity.joinFaction(factionname);
+      if (ns.singularity.joinFaction(factionname))
+        log(ns, `Joined: ${factionname}`, 'warning');
     }
-    let hackingOnly = true;
-    if (ns.singularity.getOwnedAugmentations().length >= 22) // suboptimal, but close
-      hackingOnly = false;
-    let best = findAugmentationToBuy(ns, null, hackingOnly);
+    
+    let hackingOnly = false;
+    // let hackingOnly = true;
+    // if (ns.singularity.getOwnedAugmentations().length >= 22) // suboptimal, but close
+    // hackingOnly = false;
+    let best = findAugmentationToBuy(ns, null, hackingOnly, true, prioFactions);
     if (!best) {
       // we might need to grind for Daedalus
       if (!ns.singularity.getOwnedAugmentations(true).includes('The Red Pill')) {
@@ -105,19 +132,6 @@ export async function main(ns) {
             log(ns, "ERROR Couldn't start expand loop!!!");
         }
       }
-      // if (runNumber > 2) {
-      //   if (!pl.factions.includes('Volhaven'))
-      //     ns.singularity.travelToCity('Volhaven');
-      // }
-      // if (runNumber >= 2 && runNumber < 5) {
-      //   if (pl.factions.includes('Chongqing'))
-      //     ns.singularity.travelToCity('Ishima');
-      //   else if (pl.factions.includes('Ishima'))
-      //     ns.singularity.travelToCity('New Tokyo');
-      //   else if (pl.factions.includes('New Tokyo'))
-      //     ns.singularity.travelToCity('Chongqing');
-
-      // }
       // console.log('Grinding money not to sit around idle!!!!');
       // await infiltrate(ns, 'ECorp', 1, 'none'); // let's not idle
       await ns.sleep(1000);
@@ -130,7 +144,9 @@ export async function main(ns) {
     // }
 
     await grindRep(ns, best);
+    if (!shouldRun) break;
     await grindMoney(ns, best);
+    if (!shouldRun) break;
     buyAugmentation(ns, best);
 
     await ns.sleep(1000);
@@ -138,11 +154,12 @@ export async function main(ns) {
   }
 
   for (const factionname of ns.singularity.checkFactionInvitations()) {
-    ns.singularity.joinFaction(factionname);
+    if (ns.singularity.joinFaction(factionname))
+      log(ns, `Joined: ${factionname}`, 'warning');
   }
 
   let leftoverAugmentation;
-  while ((leftoverAugmentation = findAugmentationToBuy(ns, pl.money, false, false)) && shouldRun) {
+  while ((leftoverAugmentation = findAugmentationToBuy(ns, pl.money, false, false, prioFactions)) && shouldRun) {
     // if we still have money to buy any hack augmentations.. but can grind rep
     await grindRep(ns, leftoverAugmentation);
     buyAugmentation(ns, leftoverAugmentation);
@@ -161,16 +178,13 @@ export async function main(ns) {
   while (ns.singularity.upgradeHomeCores())
     log(ns, 'upgraded cores on exit');
 
-  log(ns, `AUGMENTS INSTALLED at ${new Date()}. Run took: ${timeTakenInSeconds(startDate, new Date())}s`, 'success', 60000);
-  ns.singularity.installAugmentations('singl.js');
+  log(ns, `AUGMENTS INSTALLED at ${new Date().toTimeString()}. Run took: ${timeTakenInSeconds(startDate, new Date())}s. Since last AUG: ${new Date(ns.getTimeSinceLastAug())}`, 'success', 60000);
+  ns.singularity.installAugmentations('starter.js');
 }
 
-let infiInfo;
 /** @param {NS} ns */
 function infiltrationInfo(ns) {
-  if (infiInfo) return infiInfo;
-
-  infiInfo = {}
+  let infiInfo = {}
   let infiLocations = ns.infiltration.getPossibleLocations();
 
   for (const loc in infiLocations) {
@@ -178,6 +192,20 @@ function infiltrationInfo(ns) {
     infiInfo[l.name] = ns.infiltration.getInfiltration(l.name);
   }
   return infiInfo;
+}
+
+function bestInfi(infiInfo) {
+  let bestCompany = null;
+  let highestTradeRepValue = -Infinity;
+
+  for (const key in infiInfo) {
+    const company = infiInfo[key];
+    if (company.reward.tradeRep > highestTradeRepValue) {
+      highestTradeRepValue = company.reward.tradeRep;
+      bestCompany = company;
+    }
+  }
+  return bestCompany;
 }
 
 /** @param {NS} ns */
@@ -188,43 +216,60 @@ function buyAugmentation(ns, aug) {
     log(ns, `Couldn't buy augmentation: ${aug.aug} in ${aug.faction}`, 'warning');
 }
 
+let repGainPer100k;
+/** @param {NS} ns */
+async function repPer100k(ns, faction) {
+  if (repGainPer100k) return repGainPer100k;
+
+  while (ns.getPlayer().money < 100000)
+    await ns.sleep(200);
+  let fRepBefore = ns.singularity.getFactionRep(faction);
+  ns.singularity.donateToFaction(faction, 100000);
+  let fRepAfter = ns.singularity.getFactionRep(faction);
+  repGainPer100k = fRepAfter - fRepBefore;
+  return repGainPer100k;
+}
 /** @param {NS} ns */
 async function grindRep(ns, aug) {
   let factionRep = ns.singularity.getFactionRep(aug.faction);
   if (aug.repreq > factionRep) {
+    const facFavor = ns.singularity.getFactionFavor(aug.faction);
+    if (facFavor >= ns.getFavorToDonate() && ns.getPlayer().skills.hacking > 6000) {
 
-    // figure out the number of times and/or target  we need to run the faction grind
-    const whatToGrind = fulfillRequestedReputation(infiltrationInfo(ns), aug.repreq - factionRep);
-    let company = whatToGrind[0].company;
-    let times = whatToGrind[0].times;
-    if (whatToGrind.length > 1)//hack before i add it to the method, instead of running the for loop
-      times += 1;
-    if (aug.aug == 'NeuroFlux Governor') {
-      company = 'ECorp';
-      times = 1;
+      let required = aug.repreq - factionRep;
+      const repGain = await repPer100k(ns, aug.faction);
+
+      let moneyToBuyRep = required / repGain * 100000;
+      if (ns.getPlayer().money < moneyToBuyRep)
+        log(ns, `Waiting for money to donate to ${aug.faction} to buy ${required} rep`, 'warning');
+      while (ns.getPlayer().money < moneyToBuyRep)
+        await ns.sleep(200);
+
+      if (ns.singularity.donateToFaction(aug.faction, moneyToBuyRep)) {
+
+        log(ns, `Donated: ${ns.nFormat(moneyToBuyRep, "$0.0a")} to ${aug.faction} to buy ${required} rep`, 'warning');
+        return;
+      }
     }
 
-    await grindInfiltration(ns, aug, company, times, aug.faction);
+    // figure out the number of times and/or target  we need to run the faction grind
+    const grindTarget = infiToGrind(ns, null, aug.repreq - factionRep);
+    await grindInfiltration(ns, aug, grindTarget.company, grindTarget.times, aug.faction);
   }
 }
 
 /** @param {NS} ns */
 async function grindMoney(ns, aug) {
-  if (ns.singularity.getOwnedAugmentations(false) > 50) {
-    log(ns, "Skipping infiltration to grind money since it's fast enough to wait");
-    while (ns.getPlayer.money < aug.price)
+  if (ns.getPlayer().skills.hacking > 5000) {
+    log(ns, "Skipping infiltration to grind money since it should be fast enough to just wait");
+    while (ns.getPlayer().money < aug.price)
       await ns.sleep(200);
   }
   else {
     let pl = ns.getPlayer();
     if (aug.price > pl.money) {
-      let whatToGrind = fulfillRequestedMoney(infiltrationInfo(ns), aug.price - pl.money);
-      const company = whatToGrind[0].company;
-      const times = whatToGrind[0].times;
-
-      if (whatToGrind.length > 1)//hack before i add it to the method, instead of running the for loop
-        times += 1;
-      await grindInfiltration(ns, aug, company, times, 'none');
+      let grindTarget = infiToGrind(ns, aug.price - pl.money);
+      await grindInfiltration(ns, aug, grindTarget.company, grindTarget.times, 'none');
     }
   }
 }
@@ -234,96 +279,23 @@ async function grindInfiltration(ns, aug, company, times, faction) {
   await infiltrate(ns, company, times, faction);
 }
 
-function fulfillRequestedReputation(infi_info, requestedReputation) {
-  const companyArray = Object.entries(infi_info).map(([name, company]) => ({
-    name,
-    tradeRep: company.reward.tradeRep
-  }));
-
-  companyArray.sort((a, b) => a.tradeRep - b.tradeRep);
-
-  let remainingReputation = requestedReputation;
-  let optimalCompanies = [];
-
-  let closestCompany = null;
-  for (const company of companyArray) {
-    const { name, tradeRep } = company;
-
-    if (tradeRep >= requestedReputation) {
-      closestCompany = { company: name, times: 1 };
-      break;
-    }
-  }
-  if (closestCompany) return [closestCompany];
-
-  companyArray.sort((a, b) => b.tradeRep - a.tradeRep);
-  for (const company of companyArray) {
-    const { name, tradeRep } = company;
-    const timesToWork = Math.ceil(remainingReputation / tradeRep);
-
-    if (timesToWork > 0) {
-      // debugger;
-      optimalCompanies.push({ company: name, times: timesToWork });
-      remainingReputation -= timesToWork * tradeRep;
-    }
-  }
-
-  return optimalCompanies;
+function infiToGrind(ns, requestedMoney, requestedReputation) {
+  const cpn = bestInfi(infiltrationInfo(ns));
+  let timesToWork;
+  if (requestedMoney)
+    timesToWork = Math.ceil(requestedMoney / cpn.reward.sellCash);
+  else
+    timesToWork = Math.ceil(requestedReputation / cpn.reward.tradeRep);
+  return { company: cpn.location.name, times: timesToWork };
 }
 
-function fulfillRequestedMoney(infi_info, requestedMoney) {
-  const companyArray = Object.entries(infi_info).map(([name, company]) => ({
-    name,
-    money: company.reward.sellCash
-  }));
-
-  companyArray.sort((a, b) => a.tradeRep - b.tradeRep);
-
-  let closestCompany = null;
-  for (const company of companyArray) {
-    const { name, money } = company;
-
-    if (money >= requestedMoney) {
-      closestCompany = { company: name, times: 1 };
-      break;
-    }
-  }
-  if (closestCompany) return [closestCompany];
-
-  companyArray.sort((a, b) => b.money - a.money);
-
-  let remainingMoney = requestedMoney;
-  let optimalCompanies = [];
-
-  for (const company of companyArray) {
-    const { name, money } = company;
-    const timesToWork = Math.ceil(remainingMoney / money);
-
-    if (timesToWork > 0) {
-      // debugger;
-      optimalCompanies.push({ company: name, times: timesToWork });
-      remainingMoney -= timesToWork * money;
-    }
-  }
-
-  return optimalCompanies;
-}
 /** @param {NS} ns */
-function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, noShadows = true) {
-  // 1. go through factions joined
-  // 2. list the available augmentatinos
-  // 3. find the ones that add Hacking skill, exp, power and so on
-  // 4. take all skills upgrade into consideration as well
-  // Starter kit is also okish, but not the most important since we can run MegaCorp infiltration anyhow
-  // some weights system could be the best - like percentage of each skill times weight divided by cost
-  // so that we have best value for money and just buy those, but on the other hand we want the most expensive
-  // augments first, since each one increases the costs
-  //
+function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, noShadows = true, prioritizeFactions = []) {
   let pl = ns.getPlayer();
   const owned = ns.singularity.getOwnedAugmentations(true);
+  const notInstalled = owned.length - ns.singularity.getOwnedAugmentations(false).length;
   const augDict = {}
-
-  // Aevum is good for starters - security work + 3 augmentations - neurotrainer, pcmmatrix and Neuralstimulator
+  const factionrep = Object.fromEntries(ns.getPlayer().factions.map(f => [f, ns.singularity.getFactionRep(f)]));
   for (const f of pl.factions) {
     augDict[f] = {}
     let augs = ns.singularity.getAugmentationsFromFaction(f);
@@ -337,11 +309,14 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
       augDict[f][aug].price = ns.singularity.getAugmentationPrice(aug);
       augDict[f][aug].prereq = ns.singularity.getAugmentationPrereq(aug);
       augDict[f][aug].repreq = ns.singularity.getAugmentationRepReq(aug);
+      augDict[f][aug].facrep = factionrep[f];
     }
   }
+  // debugger;
 
+  const highestInfi = bestInfi(infiltrationInfo(ns));
+  // debugger;
   const filteredEntries = [];
-
   for (const faction in augDict) {
     for (const aug in augDict[faction]) {
       const entry = augDict[faction][aug];
@@ -350,21 +325,49 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
       if (moneyAvailable && (moneyAvailable < entry.price)) continue;
       // if (moneyAvailable && (moneyAvailable < entry.price || ns.singularity.getFactionRep(faction) < entry.repreq)) continue;
       if (!entry.prereq.every(e => owned.includes(e))) continue; // we want to own all the prereqs
-      if (hackingOnly && !(hacking_chance > 1 || hacking_speed > 1 || hacking_money > 1 || hacking_grow > 1 || hacking > 1 || hacking_exp > 1)) continue;
-
+      const isHacking = hacking_chance > 1 || hacking_speed > 1 || hacking_money > 1 || hacking_grow > 1 || hacking > 1 || hacking_exp > 1;
+      if (hackingOnly && !isHacking) continue;
+      if (faction == 'Bladeburners' && entry.repreq > factionrep[faction]) continue; // Bladeburners can't grind rep through Infiltration
       filteredEntries.push({
         faction,
         aug,
         price: entry.price,
         repreq: entry.repreq,
         multis: entry.multis,
-
+        facrep: entry.facrep,
+        isHacking: isHacking,
+        repRuns: entry.repreq <= entry.facrep ? 0 : Math.ceil((entry.repreq - entry.facrep) / highestInfi.reward.tradeRep),
+        moneyRuns: pl.money >= entry.price ? 0 : Math.ceil((entry.price - pl.money) / highestInfi.reward.sellCash),
+        isNeuroFlux: aug === 'NeuroFlux Governor',
+        isPrio: prioritizeFactions.includes(faction)
       });
 
     }
   }
+  // debugger;
+  const moneyRunsLimit = 30; // if we already have augmentations installed and they are crazy expensive.. put them at the bottom of the list
+  const sortedEntries = filteredEntries.sort((a, b) => {
+    if (a.aug === 'Neuroreceptor Management Implant' && b.aug !== 'Neuroreceptor Management Implant') return -1; // not focused bonus from Tian Di Hui
+    if (a.aug !== 'Neuroreceptor Management Implant' && b.aug === 'Neuroreceptor Management Implant') return 1; // not focused bonus from Tian Di Hui
 
-  const sortedEntries = filteredEntries.sort((a, b) => b.price - a.price);
+    if (notInstalled > 0 && a.moneyRuns > moneyRunsLimit && b.moneyRuns <= moneyRunsLimit) return 1;
+    else if (notInstalled > 0 && a.moneyRuns <= moneyRunsLimit && b.moneyRuns > moneyRunsLimit) return -1;
+
+    if (a.isNeuroFlux && !b.isNeuroFlux) return 1;
+    else if (!a.isNeuroFlux && b.isNeuroFlux) return -1;
+
+    if (a.isPrio && !b.isPrio) return -1;
+    else if (!a.isPrio && b.isPrio) return 1;
+
+    if (a.isHacking && !b.isHacking) return -1;
+    else if (!a.isHacking && b.isHacking) return 1;
+
+    // if (a.price !== b.price) return b.price - a.price; // Sort by price in descending order
+    if (a.price !== b.price) return a.price - b.price; // Sort by price in ascending order
+    else if (a.facrep !== b.facrep) return b.facrep - a.facrep; // Sort by facrep in descending order
+    else return 0;
+  });
+
   return sortedEntries[0];
 }
 
@@ -443,8 +446,12 @@ function timeTakenInSeconds(startDate, endDate) {
 function log(ns, msg, type = 'info', time = 15000) {
   console.log(msg);
   ns.toast(msg, type, time);
-  if (type == 'info' || type == 'success')
+  if (type == 'info' || type == 'success') {
+    ns.print(msg);
     ns.tprint(msg);
-  else
+  }
+  else {
+    ns.print(type.toUpperCase() + ": " + msg);
     ns.tprint(type.toUpperCase() + ": " + msg);
+  }
 }
