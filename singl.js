@@ -1,13 +1,21 @@
+import { log, timeTakenInSeconds, formatDuration, startScript, numberOfPortsOpenable } from 'common.js'
+
 const wnd = eval("window");
 const doc = wnd["document"];
+const AUGS_PER_RUN = 6;
+let shouldRun = true;
+let singlRunNumber;
+
 /** @param {NS} ns */
 export async function main(ns) {
+  if (!singlRunNumber) singlRunNumber = 1;
   // const resetInfo = ns.getResetInfo(); const lastAugReset = resetInfo.lastAugReset; ns.tprint(`The last augmentation reset was: ${new Date(lastAugReset)}`); ns.tprint(`It has been ${Date.now() - lastAugReset}ms since the last augmentation reset.`);
-
+  shouldRun = true;
+  //TODO: 1. calculate the max amount of ram and possible speed per second that we can achieve + cost 
+  // 2. calculate the number of infi runs to predict the time it will take + display when to reload because of lag
   ns.disableLog('ALL');
-  const augsPerRun = 8;
   let force = ns.args[0];
-  let shouldRun = true;
+  const infi = new Infiltration(ns);
   // cancel this loop by pressing ESC
   function handleEscapeKey(event) {
     if (event.key === 'Escape' || event.keyCode === 27) {
@@ -21,61 +29,108 @@ export async function main(ns) {
     doc.removeEventListener('keydown', handleEscapeKey);
   });
 
-  let prioFactions = [];
-  let expandPid;
-  let pl = ns.getPlayer();
   const startDate = new Date();
   // Augmentations will get installed in bulk of 10
-  let runNumber = ns.singularity.getOwnedAugmentations().length / augsPerRun;
+  let runNumber = ns.singularity.getOwnedAugmentations().length / AUGS_PER_RUN;
 
   // if (startScript(ns, "infi.js")) log(ns, "Infiltration automated.");
   // startScript(ns, "stats.js")
-  if (startScript(ns, "backdoor_loop.js")) log(ns, "Backdooring...");
   if (startScript(ns, "homigrind_loop.js")) log(ns, "Grinding karma...");
   if (startScript(ns, "ultimate_spread.js", 'noexpand')) log(ns, "Spreading...");
 
   //  this shouldn't be really needed - this script must be executed at the very beginning after restart
   // if (force || pl.playtimeSinceLastAug < 100000 || pl.money < 100000000 || !ns.hasTorRouter()) {
-  if (force || !ns.hasTorRouter()) {
-    // One infiltration run of MegaCorp to gain some init money before we can travel to Aevum for ECorp grinding
-    if (ns.getPlayer().money < 300000000) {
-      if (ns.singularity.travelToCity('Aevum'))
-        await infiltrate(ns, 'ECorp', 1, 'none');
-      else
-        await infiltrate(ns, 'MegaCorp', 1, 'none');
-      log(ns, 'Running pre intro infiltration', 'info', 70000);
-    }
-
-
-    if (ns.singularity.joinFaction('Shadows of Anarchy'))
-      log(ns, `Joined: ${'Shadows of Anarchy'}`, 'warning');
-    buyApps(ns);
-    expandServers(ns);
-    // split to allow different Factions to pop up
-    if (runNumber < 2) {
-      log(ns, 'Running American intro infiltrations', 'info', 80000 * 3);
-      prioFactions = ['Sector-12', 'Aevum']
-      await infiltrate(ns, 'ECorp', 3, 'none');
-    }
-    if (runNumber < 7 && runNumber >= 2) {
-      log(ns, 'Running Asian intro infiltrations', 'info', 80000 * 3);
-      prioFactions = ['Chongqing', 'Ishima', 'New Tokyo']
-      await infiltrate(ns, 'KuaiGong International', 1, 'none');
-      await infiltrate(ns, 'VitaLife', 1, 'none');
-      await infiltrate(ns, 'Storm Technologies', 1, 'none');
-    }
-    if (runNumber < 12 && runNumber >= 7) {
-      log(ns, 'Running European intro infiltrations', 'info', 80000 * 2);
-      prioFactions = ['Volhaven']
-      await infiltrate(ns, 'OmniTek Incorporated', 2, 'none');
-    }
-    if (runNumber == 0) {
-      ns.singularity.purchaseAugmentation('Shadows of Anarchy', 'SoA - phyzical WKS harmonizer');
-
-      Array.from({ length: 6 }, () => ns.singularity.upgradeHomeRam());
-      Array.from({ length: 6 }, () => ns.singularity.upgradeHomeCores());
-    }
+  if (force || !ns.hasTorRouter() || numberOfPortsOpenable(ns) < 5) {
+    await runIntro(ns, infi, runNumber);
   }
+
+  // if (runNumber < 8) {
+  if (ns.getPlayer().skills.hacking < 4500) {
+    stopExpandingServers(ns);
+  }
+  await grindAugmentations(ns, infi, runNumber);
+
+  for (const factionname of ns.singularity.checkFactionInvitations()) {
+    if (ns.singularity.joinFaction(factionname) && shouldRun)
+      log(ns, `Joined: ${factionname}`, 'warning');
+  }
+
+  if (!shouldRun) {
+    log(ns, 'Escape key pressed. Cancelling singl.js', 'error');
+    return;
+  }
+
+  while (ns.singularity.upgradeHomeRam())
+    log(ns, 'upgraded ram on exit');
+
+  while (ns.singularity.upgradeHomeCores())
+    log(ns, 'upgraded cores on exit');
+
+  log(ns, `AUGMENTS INSTALLED at ${new Date()}. Run took: ${formatDuration(timeTakenInSeconds(startDate, new Date()))}s. Since last AUG: ${formatDuration(ns.getTimeSinceLastAug() / 1000)}`, 'success', 60000);
+  ns.singularity.installAugmentations('starter.js');
+}
+
+/** @param {NS} ns */
+async function runIntro(ns, infi, runNumber) {
+  //TODO: Maybe it makes sense to just infiltrate and install all augs in Americas-> Asian => Europe one by one, then CyberSec, NiteSec, Tian, Black Hand and wait explicitly for Deadelus and then gang?
+
+  // One infiltration run of MegaCorp/ECorp to gain some init money before we can travel to Aevum for ECorp grinding
+  if (ns.getPlayer().money < 300000000) {
+    log(ns, 'Running pre intro infiltration', 'info', 70 * 1000);
+    if (ns.singularity.travelToCity('Aevum'))
+      await infi.infiltrate('ECorp', 1, 'none');
+    else
+      await infi.infiltrate('MegaCorp', 1, 'none');
+  }
+
+  if (ns.singularity.joinFaction('Shadows of Anarchy'))
+    log(ns, `Joined: ${'Shadows of Anarchy'}`, 'warning');
+  buyApps(ns);
+  expandServers(ns);
+  if (startScript(ns, "backdoor_loop.js")) log(ns, "Backdooring...");
+  // split to allow different Factions to pop up
+  if (runNumber == 1 && (!ns.getPlayer().factions.includes('Sector-12') || !ns.getPlayer().factions.includes('Aevum'))) {
+    log(ns, 'Running American intro infiltrations', 'info', 80 * 1000 * 3);
+    // prioFactions = ['Sector-12', 'Aevum']
+    await infi.infiltrate('ECorp', 3, 'none');
+    ns.singularity.joinFaction('Sector-12');
+  }
+  if (runNumber < 2 && (!ns.getPlayer().factions.includes('Sector-12') || !ns.getPlayer().factions.includes('Aevum'))) {
+    log(ns, 'Running American intro infiltrations', 'info', 80 * 1000 * 3);
+    // prioFactions = ['Sector-12', 'Aevum']
+    await infi.infiltrate('ECorp', 3, 'none');
+    ns.singularity.joinFaction('Sector-12');
+  }
+  if (runNumber < 7 && runNumber >= 2 && (!ns.getPlayer().factions.includes('Chongqing') || !ns.getPlayer().factions.includes('Ishima') || !ns.getPlayer().factions.includes('New Tokyo'))) {
+    log(ns, 'Running Asian intro infiltrations', 'info', 80 * 1000 * 3);
+    // prioFactions = ['Chongqing', 'Ishima', 'New Tokyo']
+    await infi.infiltrate('KuaiGong International', 1, 'none');
+    await infi.infiltrate('VitaLife', 1, 'none');
+    await infi.infiltrate('Storm Technologies', 1, 'none');
+    ns.singularity.joinFaction('Chongqing');
+  }
+  if (runNumber < 12 && runNumber >= 7 && !ns.getPlayer().factions.includes('Volhaven')) {
+    log(ns, 'Running European intro infiltrations', 'info', 80 * 1000 * 2);
+    // prioFactions = ['Volhaven']
+    await infi.infiltrate('OmniTek Incorporated', 2, 'none');
+    ns.singularity.joinFaction('Volhaven');
+  }
+
+  ns.singularity.purchaseAugmentation('Shadows of Anarchy', 'SoA - phyzical WKS harmonizer');
+
+  if (runNumber == 0) {
+    Array.from({ length: 6 }, () => ns.singularity.upgradeHomeRam());
+    Array.from({ length: 6 }, () => ns.singularity.upgradeHomeCores());
+  }
+}
+
+/** @param {NS} ns 
+ * @param {Infiltration} infi
+*/
+async function grindAugmentations(ns, infi, runNumber) {
+  let pl = ns.getPlayer();
+
+  let prioFactions = [];
   if (runNumber < 2) {
     prioFactions = ['Sector-12', 'Aevum'];
   }
@@ -88,14 +143,7 @@ export async function main(ns) {
   if (runNumber < 5 && runNumber >= 3)
     prioFactions.push('The Black Hand', 'CyberSec', 'NiteSec');
 
-  if (runNumber < 8) {
-    // if (ns.getPlayer().skills.hacking<5000) {
-    if (ns.isRunning("upgrade_servers.js")) {
-      ns.kill("upgrade_servers.js");
-      log(ns, 'Money grinding is slow.. stopping upgrades', 'warning');
-    }
-  }
-  while (ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < augsPerRun && shouldRun) {
+  while (ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length <= AUGS_PER_RUN && shouldRun) {
     // while ((pl.factions.includes('Daedalus') && !ns.singularity.getOwnedAugmentations(true).includes('The Red Pill')) || ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < 8 && shouldRun) {
     // so we grind until we install 8 new augmentations.. backdoor on world deamon gets installed automatically in backdoor_loop.js
 
@@ -107,45 +155,42 @@ export async function main(ns) {
       if (ns.singularity.joinFaction(factionname))
         log(ns, `Joined: ${factionname}`, 'warning');
     }
-    
-    let hackingOnly = false;
-    // let hackingOnly = true;
+
+    // let hackingOnly = false;
+    let hackingOnly = true; // combat stats multiplier impact infiltration rewards.. hacking only makes sense
     // if (ns.singularity.getOwnedAugmentations().length >= 22) // suboptimal, but close
     // hackingOnly = false;
-    let best = findAugmentationToBuy(ns, null, hackingOnly, true, prioFactions);
+    // neuroflex also impacts combat skills and joining a gang becomes necessary.. maybe makes no sense to buy it, since i have to wait either way
+    // calculate neuroflex impact on Infiltration rewards?
+    let best = findAugmentationToBuy(ns, null, hackingOnly, true, prioFactions, true);
     if (!best) {
       // we might need to grind for Daedalus
       if (!ns.singularity.getOwnedAugmentations(true).includes('The Red Pill')) {
+        //TODO: Deadalus augmentation number requirements is dynamic
         if (pl.skills.hacking > 2500 && ns.singularity.getOwnedAugmentations().length > 30 && pl.money < 100000000000 && !pl.factions.includes('Daedalus')) {
-          if (ns.isRunning("upgrade_servers.js")) {
-            ns.kill("upgrade_servers.js");
-            log(ns, 'Killing upgrades to allow Daedalus to pop up');
-          }
+
+          // stopExpandingServers(ns);
+          log(ns, 'Killing upgrades to allow Daedalus to pop up');
         }
+        // else {
+        //   expandServers(ns);
+        // }
       }
-      else {
-        if (!ns.isRunning("upgrade_servers.js")) {
-          expandPid = ns.exec("expand_servers.js", 'home', 1, 'noprompt');
-          if (expandPid != 0)
-            log(ns, "Started server expand loop");
-          else
-            log(ns, "ERROR Couldn't start expand loop!!!");
-        }
-      }
+      // nothing to augment, let's enable upgrades and run grind some money
+      expandServers(ns);
+      log(ns, 'Nothing to buy... just grinding money', 'warning');
+      await infi.infiltrate('ECorp', 1, 'none');
       // console.log('Grinding money not to sit around idle!!!!');
       // await infiltrate(ns, 'ECorp', 1, 'none'); // let's not idle
       await ns.sleep(1000);
       pl = ns.getPlayer();
       continue;
     }
-    // let's stop the server expansion for now cause we want to save money for augments
-    // if (expandPid && ns.isRunning(expandPid)) {
-    //   ns.kill(expandPid);
-    // }
+    stopExpandingServers(ns);
 
-    await grindRep(ns, best);
+    await infi.grindRep(best);
     if (!shouldRun) break;
-    await grindMoney(ns, best);
+    await infi.grindMoney(best);
     if (!shouldRun) break;
     buyAugmentation(ns, best);
 
@@ -153,59 +198,15 @@ export async function main(ns) {
     pl = ns.getPlayer();
   }
 
-  for (const factionname of ns.singularity.checkFactionInvitations()) {
-    if (ns.singularity.joinFaction(factionname))
-      log(ns, `Joined: ${factionname}`, 'warning');
-  }
-
   let leftoverAugmentation;
-  while ((leftoverAugmentation = findAugmentationToBuy(ns, pl.money, false, false, prioFactions)) && shouldRun) {
+  while ((leftoverAugmentation = findAugmentationToBuy(ns, ns.getPlayer().money, true, false, prioFactions, false)) && shouldRun) {
     // if we still have money to buy any hack augmentations.. but can grind rep
-    await grindRep(ns, leftoverAugmentation);
+    await infi.grindRep(leftoverAugmentation);
     buyAugmentation(ns, leftoverAugmentation);
 
     await ns.sleep(1000);
     pl = ns.getPlayer();
   }
-  if (!shouldRun) {
-    log(ns, 'Escape key pressed. Cancelling singl.js', 'error');
-    return;
-  }
-
-  while (ns.singularity.upgradeHomeRam())
-    log(ns, 'upgraded ram on exit');
-
-  while (ns.singularity.upgradeHomeCores())
-    log(ns, 'upgraded cores on exit');
-
-  log(ns, `AUGMENTS INSTALLED at ${new Date().toTimeString()}. Run took: ${timeTakenInSeconds(startDate, new Date())}s. Since last AUG: ${new Date(ns.getTimeSinceLastAug())}`, 'success', 60000);
-  ns.singularity.installAugmentations('starter.js');
-}
-
-/** @param {NS} ns */
-function infiltrationInfo(ns) {
-  let infiInfo = {}
-  let infiLocations = ns.infiltration.getPossibleLocations();
-
-  for (const loc in infiLocations) {
-    let l = infiLocations[loc];
-    infiInfo[l.name] = ns.infiltration.getInfiltration(l.name);
-  }
-  return infiInfo;
-}
-
-function bestInfi(infiInfo) {
-  let bestCompany = null;
-  let highestTradeRepValue = -Infinity;
-
-  for (const key in infiInfo) {
-    const company = infiInfo[key];
-    if (company.reward.tradeRep > highestTradeRepValue) {
-      highestTradeRepValue = company.reward.tradeRep;
-      bestCompany = company;
-    }
-  }
-  return bestCompany;
 }
 
 /** @param {NS} ns */
@@ -216,94 +217,29 @@ function buyAugmentation(ns, aug) {
     log(ns, `Couldn't buy augmentation: ${aug.aug} in ${aug.faction}`, 'warning');
 }
 
-let repGainPer100k;
-/** @param {NS} ns */
-async function repPer100k(ns, faction) {
-  if (repGainPer100k) return repGainPer100k;
-
-  while (ns.getPlayer().money < 100000)
-    await ns.sleep(200);
-  let fRepBefore = ns.singularity.getFactionRep(faction);
-  ns.singularity.donateToFaction(faction, 100000);
-  let fRepAfter = ns.singularity.getFactionRep(faction);
-  repGainPer100k = fRepAfter - fRepBefore;
-  return repGainPer100k;
-}
-/** @param {NS} ns */
-async function grindRep(ns, aug) {
-  let factionRep = ns.singularity.getFactionRep(aug.faction);
-  if (aug.repreq > factionRep) {
-    const facFavor = ns.singularity.getFactionFavor(aug.faction);
-    if (facFavor >= ns.getFavorToDonate() && ns.getPlayer().skills.hacking > 6000) {
-
-      let required = aug.repreq - factionRep;
-      const repGain = await repPer100k(ns, aug.faction);
-
-      let moneyToBuyRep = required / repGain * 100000;
-      if (ns.getPlayer().money < moneyToBuyRep)
-        log(ns, `Waiting for money to donate to ${aug.faction} to buy ${required} rep`, 'warning');
-      while (ns.getPlayer().money < moneyToBuyRep)
-        await ns.sleep(200);
-
-      if (ns.singularity.donateToFaction(aug.faction, moneyToBuyRep)) {
-
-        log(ns, `Donated: ${ns.nFormat(moneyToBuyRep, "$0.0a")} to ${aug.faction} to buy ${required} rep`, 'warning');
-        return;
-      }
-    }
-
-    // figure out the number of times and/or target  we need to run the faction grind
-    const grindTarget = infiToGrind(ns, null, aug.repreq - factionRep);
-    await grindInfiltration(ns, aug, grindTarget.company, grindTarget.times, aug.faction);
-  }
-}
-
-/** @param {NS} ns */
-async function grindMoney(ns, aug) {
-  if (ns.getPlayer().skills.hacking > 5000) {
-    log(ns, "Skipping infiltration to grind money since it should be fast enough to just wait");
-    while (ns.getPlayer().money < aug.price)
-      await ns.sleep(200);
-  }
-  else {
-    let pl = ns.getPlayer();
-    if (aug.price > pl.money) {
-      let grindTarget = infiToGrind(ns, aug.price - pl.money);
-      await grindInfiltration(ns, aug, grindTarget.company, grindTarget.times, 'none');
-    }
-  }
-}
-/** @param {NS} ns */
-async function grindInfiltration(ns, aug, company, times, faction) {
-  log(ns, `Grinding ${faction == 'none' ? 'money' : 'rep'} on: ${company} ${times} times to buy ${aug.aug} in ${aug.faction}`, 'info', 80000 * times);
-  await infiltrate(ns, company, times, faction);
-}
-
-function infiToGrind(ns, requestedMoney, requestedReputation) {
-  const cpn = bestInfi(infiltrationInfo(ns));
-  let timesToWork;
-  if (requestedMoney)
-    timesToWork = Math.ceil(requestedMoney / cpn.reward.sellCash);
-  else
-    timesToWork = Math.ceil(requestedReputation / cpn.reward.tradeRep);
-  return { company: cpn.location.name, times: timesToWork };
-}
-
-/** @param {NS} ns */
-function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, noShadows = true, prioritizeFactions = []) {
+/** Returns the currently best Augmentation that is available to the user with the given parameters
+ * @param {NS} ns 
+ * @param {number} moneyAvailable If not null it will limit selection to augmentations that are currently affordable
+ * @param {boolean} hackingOnly Limit to augmentations which have hacking multipliers
+ * @param {boolean} noShadows Filter out Shadows of Anarchy faction if true
+ * @param {Array<string>} prioritizeFactions Array of factions which should be prioritized during selection
+ * */
+function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, noShadows = true, prioritizeFactions = [], allowNeuroFlux = false) {
   let pl = ns.getPlayer();
   const owned = ns.singularity.getOwnedAugmentations(true);
   const notInstalled = owned.length - ns.singularity.getOwnedAugmentations(false).length;
   const augDict = {}
   const factionrep = Object.fromEntries(ns.getPlayer().factions.map(f => [f, ns.singularity.getFactionRep(f)]));
+  const specialAugs = ['Neuroreceptor Management Implant', 'SoA - phyzical WKS harmonizer'];
+
   for (const f of pl.factions) {
     augDict[f] = {}
     let augs = ns.singularity.getAugmentationsFromFaction(f);
     for (const aug of augs) {
-      if (hackingOnly && aug == 'NeuroFlux Governor') continue;
-      if (noShadows && f == 'Shadows of Anarchy') continue;
+      // if (hackingOnly && aug == 'NeuroFlux Governor') continue;
+      // if (noShadows && f == 'Shadows of Anarchy') continue;
       if (aug != 'NeuroFlux Governor' && owned.includes(aug)) continue;
-      augDict[f][aug] = {}
+      augDict[f][aug] = {};
 
       augDict[f][aug].multis = ns.singularity.getAugmentationStats(aug);
       augDict[f][aug].price = ns.singularity.getAugmentationPrice(aug);
@@ -312,22 +248,30 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
       augDict[f][aug].facrep = factionrep[f];
     }
   }
-  // debugger;
 
-  const highestInfi = bestInfi(infiltrationInfo(ns));
-  // debugger;
+  const highestInfi = Infiltration.bestInfiltration;
   const filteredEntries = [];
   for (const faction in augDict) {
     for (const aug in augDict[faction]) {
       const entry = augDict[faction][aug];
       const { hacking_chance, hacking_speed, hacking_money, hacking_grow, hacking, hacking_exp } = entry.multis;
+      const { strength, strength_exp, dexterity, dexterity_exp, agility, agility_exp, defense, defense_exp } = entry.multis;
       // if moneyAvailable provided lets limit only to the ones buyable and where rep is high enough
       if (moneyAvailable && (moneyAvailable < entry.price)) continue;
+      if (noShadows && faction == 'Shadows of Anarchy')
+        if (!specialAugs.includes(aug)) continue; // harmonizer increases rewards, so we want it ASAP (if not bought at first run for whatever reason)
       // if (moneyAvailable && (moneyAvailable < entry.price || ns.singularity.getFactionRep(faction) < entry.repreq)) continue;
       if (!entry.prereq.every(e => owned.includes(e))) continue; // we want to own all the prereqs
       const isHacking = hacking_chance > 1 || hacking_speed > 1 || hacking_money > 1 || hacking_grow > 1 || hacking > 1 || hacking_exp > 1;
-      if (hackingOnly && !isHacking) continue;
+      // const isCombat = strength > 1 || strength_exp > 1 || dexterity > 1 || dexterity_exp > 1 || agility > 1 || agility_exp > 1 || defense > 1 || defense_exp > 1;
+      const isCombat = strength > 1 || dexterity > 1 || agility > 1 || defense > 1; // let's exclude non exp only
+      if (hackingOnly && isCombat && aug != 'NeuroFlux Governor') continue;
+      if (!allowNeuroFlux && aug == 'NeuroFlux Governor') continue; // let's skip non combat because of infiltration, but charisma and special add to augmentation number
+
+      // if (hackingOnly && !isHacking) // hacking exclusively
+      //   if (!specialAugs.includes(aug)) continue; // Neuroreceptor is helpful for background works so we want to buy it asap as well - not focused bonus from Tian Di Hui
       if (faction == 'Bladeburners' && entry.repreq > factionrep[faction]) continue; // Bladeburners can't grind rep through Infiltration
+
       filteredEntries.push({
         faction,
         aug,
@@ -336,6 +280,7 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
         multis: entry.multis,
         facrep: entry.facrep,
         isHacking: isHacking,
+        isCombat: isCombat,
         repRuns: entry.repreq <= entry.facrep ? 0 : Math.ceil((entry.repreq - entry.facrep) / highestInfi.reward.tradeRep),
         moneyRuns: pl.money >= entry.price ? 0 : Math.ceil((entry.price - pl.money) / highestInfi.reward.sellCash),
         isNeuroFlux: aug === 'NeuroFlux Governor',
@@ -362,8 +307,8 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
     if (a.isHacking && !b.isHacking) return -1;
     else if (!a.isHacking && b.isHacking) return 1;
 
-    // if (a.price !== b.price) return b.price - a.price; // Sort by price in descending order
-    if (a.price !== b.price) return a.price - b.price; // Sort by price in ascending order
+    if (a.price !== b.price) return b.price - a.price; // Sort by price in descending order
+    // if (a.price !== b.price) return a.price - b.price; // Sort by price in ascending order
     else if (a.facrep !== b.facrep) return b.facrep - a.facrep; // Sort by facrep in descending order
     else return 0;
   });
@@ -373,39 +318,21 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
 
 /** @param {NS} ns */
 function expandServers(ns) {
-  if (!ns.isRunning("expand_servers.js", 'home', 'noprompt') || !ns.isRunning("upgrade_servers.js", 'home'))
+  if (!ns.isRunning("expand_servers.js", 'home', 'noprompt') && !ns.isRunning("upgrade_servers.js", 'home'))
     if (startScript(ns, "expand_servers.js", 'noprompt')) ns.tprint("Started server expand loop");
 }
 
-function startScript(ns, scriptName, param) {
-  if (param) {
-    if (!ns.isRunning(scriptName, 'home', param)) {
-      if (ns.exec(scriptName, 'home', 1, param) != 0)
-        return true;
-    }
-    else return true;
-  }
-  else if (!ns.isRunning(scriptName, 'home')) {
-    if (ns.exec(scriptName, 'home', 1) != 0)
-      return true;
-
-    log(ns, `Couldn't start ${scriptName}!!!`, 'error');
-    return false;
-  }
-  else return true;
-}
-
-function stopScript(ns, scriptName, param) {
-  if (!ns.isRunning(scriptName, 'home', 'noprompt')) {
-    expandPid = ns.exec(scriptName, 'home', 1, 'noprompt');
-    if (expandPid != 0)
-      ns.tprint("Started server expand loop");
-    else
-      ns.tprint("ERROR Couldn't start expand loop!!!");
-  }
-}
-
 /** @param {NS} ns */
+function stopExpandingServers(ns) {
+  if (ns.isRunning("expand_servers.js", 'home', 'noprompt') || ns.isRunning("upgrade_servers.js", 'home')) {
+    ns.kill("upgrade_servers.js");
+    ns.kill("expand_servers.js");
+    log(ns, 'Stopping server upgrades', 'warning');
+  }
+}
+
+/** Buys Tor and all the hacking apps
+ * @param {NS} ns */
 function buyApps(ns) {
   if (ns.singularity.purchaseTor()) {
     ns.singularity.purchaseProgram('BruteSSH.exe');
@@ -418,40 +345,163 @@ function buyApps(ns) {
   }
 }
 
-/** @param {NS} ns */
-async function infiltrate(ns, target, times, faction) {
-  if (ns.getPlayer().hp.current < ns.getPlayer().hp.max)
-    ns.singularity.hospitalize();
-  const infiPid = ns.exec("infi_loop.js", 'home', 1, target, times, faction, 'dontGrind');
-  if (infiPid != 0)
-    log(ns, `${target} for ${times} times infiltration started...`);
-  else
-    log(ns, " Couldn't start infiltration of " + target + " !!!", 'error');
-
-  while (ns.isRunning(infiPid)) {
-    await ns.sleep(2000);
+class Infiltration {
+  /**
+   * @static
+   * @type {InfiltrationLocation}
+   * @description This is a static property that holds a string value.
+   */
+  static bestInfiltration;
+  /** @param {NS} ns */
+  constructor(ns) {
+    //Netscript environment becomes part of the instance
+    this.ns = ns;
+    /**
+   * @type {InfiltrationLocation[]}
+   * @description This is a static property that holds a string value.
+   */
+    this.infiInfo = this.infiltrationInfo();
+    Infiltration.bestInfiltration = this.bestInfi();
   }
-}
 
-function timeTakenInSeconds(startDate, endDate) {
-  const startTime = startDate.getTime();
-  const endTime = endDate.getTime();
-  const timeDifferenceInMilliseconds = endTime - startTime;
-  const timeDifferenceInSeconds = Math.floor(timeDifferenceInMilliseconds / 1000);
+  /** Fetch the available infiltration that we can run and information about it: location, rewards
+   * */
+  infiltrationInfo() {
+    let infiInfo = {}
+    let infiLocations = this.ns.infiltration.getPossibleLocations();
 
-  return timeDifferenceInSeconds;
-}
-
-/** @param {NS} ns */
-function log(ns, msg, type = 'info', time = 15000) {
-  console.log(msg);
-  ns.toast(msg, type, time);
-  if (type == 'info' || type == 'success') {
-    ns.print(msg);
-    ns.tprint(msg);
+    for (const loc in infiLocations) {
+      let l = infiLocations[loc];
+      infiInfo[l.name] = this.ns.infiltration.getInfiltration(l.name);
+    }
+    return infiInfo;
   }
-  else {
-    ns.print(type.toUpperCase() + ": " + msg);
-    ns.tprint(type.toUpperCase() + ": " + msg);
+  /** Will find the best Infiltration based on how much rep will it trade in for. ECorp obviously, but the values change throughout the BitNode run based on Combat multipliers of the player
+   */
+  bestInfi() {
+    let bestCompany = null;
+    let highestTradeRepValue = -Infinity;
+
+    for (const key in this.infiInfo) {
+      const company = this.infiInfo[key];
+      if (company.reward.tradeRep > highestTradeRepValue) {
+        highestTradeRepValue = company.reward.tradeRep;
+        bestCompany = company;
+      }
+    }
+    return bestCompany;
+  }
+
+  /** Heal and start infiltration for the given amount of time
+   * TODO: break the loop if some requirement change, espacially if it has to run for 30 times
+   * @param {string} target Which company should be infiltrated
+   * @param {number} times How many times to run the infiltration
+   * @param {string} faction Which faction the reputation reward should be traded for (optional) - if left out, trades in for money
+   * 
+   * Returns the avarage time taken for one infiltration run */
+  async infiltrate(target, times, faction) {
+    const startDate = new Date();
+    if (this.ns.getPlayer().hp.current < this.ns.getPlayer().hp.max)
+      this.ns.singularity.hospitalize();
+    const infiPid = this.ns.exec("infi_loop.js", 'home', 1, target, times, faction, 'dontGrind');
+    if (infiPid != 0)
+      log(this.ns, `${target} for ${times} times infiltration started...`);
+    else
+      log(this.ns, " Couldn't start infiltration of " + target + " !!!", 'error');
+
+    while (this.ns.isRunning(infiPid)) {
+      await this.ns.sleep(2000);
+    }
+    // avarage time taken per run
+    return formatDuration(timeTakenInSeconds(startDate, new Date()) / times);
+  }
+
+  /** @param {Augmentation} aug */
+  async grindMoney(aug) {
+    //$14.235b ECorp on BitNode 6 wihtouht combat augments
+    //$14.235b with 8 fluxes... hmmmm
+    const incomePerSecond = this.ns.getScriptIncome('ultimate_spread.js', 'home', 'noexpand');
+    const secondsOfPassive = aug.price / incomePerSecond;
+    // if (secondsToGrind < 60)
+    if (this.ns.getPlayer().skills.hacking > 6000) { // TODO change this
+      log(this.ns, "Skipping infiltration to grind money since it should be fast enough to just wait");
+      while (this.ns.getPlayer().money < aug.price)
+        await this.ns.sleep(200);
+    }
+    else {
+      let pl = this.ns.getPlayer();
+      if (aug.price > pl.money) {
+        const moneyToGather = aug.price - pl.money;
+        let grindTarget = this.infiToGrind(moneyToGather);
+        const grindIncomePerSecond = grindTarget.best.reward.sellCash / 80; //time is average.. could implement some counter for how many times the loop has ran so far
+        const secondsRequired = moneyToGather / (grindIncomePerSecond + secondsOfPassive);
+        const timesToRunWhilePassive = secondsRequired / 80;
+
+    // TODO calculate secondsPassive and time to grindInfi and run only the amount required
+        await this.grindInfiltration(aug, grindTarget.company, grindTarget.times, 'none');
+      }
+    }
+  }
+
+  // let repGainPer100k;
+  /** @param {NS} ns */
+  async repPer100k(faction) {
+    if (this.repGainPer100k) return this.repGainPer100k;
+
+    while (this.ns.getPlayer().money < 100000)
+      await this.ns.sleep(200);
+    let fRepBefore = this.ns.singularity.getFactionRep(faction);
+    this.ns.singularity.donateToFaction(faction, 100000);
+    let fRepAfter = this.ns.singularity.getFactionRep(faction);
+    return this.repGainPer100k = (fRepAfter - fRepBefore);
+  }
+
+  /** @param {NS} ns */
+  async grindRep(aug) {
+    // fresh no combatskilled infiltration on ECorp gives 331.682k on BitNode 6
+    let factionRep = this.ns.singularity.getFactionRep(aug.faction);
+    if (aug.repreq > factionRep) {
+      const facFavor = this.ns.singularity.getFactionFavor(aug.faction);
+      if (facFavor >= this.ns.getFavorToDonate()) {
+        const best = Infiltration.bestInfiltration;
+        let repGain = await this.repPer100k(aug.faction);
+        let repPerRun = best.reward.tradeRep;
+        let gainFromMoneyPerRun = repGain / 100000 * best.reward.sellCash;
+        let required = aug.repreq - factionRep;
+        let moneyToBuyRep = required / repGain * 100000;
+        const reqToMoneyRatio = this.ns.getPlayer().money / moneyToBuyRep;
+        if (reqToMoneyRatio > 10 || this.ns.getPlayer().skills.hacking > 6000) {
+          // if hacking high, but no money
+          if (this.ns.getPlayer().money < moneyToBuyRep)
+            log(this.ns, `Waiting for money to donate to ${aug.faction} to buy ${required} rep`, 'warning');
+          while (this.ns.getPlayer().money < moneyToBuyRep)
+            await this.ns.sleep(200);
+
+          if (this.ns.singularity.donateToFaction(aug.faction, moneyToBuyRep)) {
+            log(this.ns, `Donated: ${this.ns.nFormat(moneyToBuyRep, "$0.0a")} to ${aug.faction} to buy ${required} rep`, 'warning');
+            return;
+          }
+        }
+      }
+
+      // figure out the number of times and/or target we need to run the faction grind
+      const grindTarget = this.infiToGrind(null, aug.repreq - factionRep);
+      await this.grindInfiltration(aug, grindTarget.company, grindTarget.times, aug.faction);
+    }
+  }
+  /** @param {NS} ns */
+  async grindInfiltration(aug, company, times, faction) {
+    log(this.ns, `Grinding ${faction == 'none' ? 'money' : 'rep'} on: ${company} ${times} times to buy ${aug.aug} in ${aug.faction}`, 'info', 80 * 1000 * times);
+    await this.infiltrate(company, times, faction);
+  }
+
+  infiToGrind(requestedMoney, requestedReputation) {
+    const cpn = Infiltration.bestInfiltration;
+    let timesToWork;
+    if (requestedMoney)
+      timesToWork = Math.ceil(requestedMoney / cpn.reward.sellCash);
+    else
+      timesToWork = Math.ceil(requestedReputation / cpn.reward.tradeRep);
+    return { company: cpn.location.name, times: timesToWork, best: cpn };
   }
 }

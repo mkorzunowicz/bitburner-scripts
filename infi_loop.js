@@ -1,7 +1,9 @@
+import { log, timeTakenInSeconds} from 'common.js'
+
 // Small hack to save RAM.
 const wnd = eval("window");
 const doc = wnd["document"];
-
+let infiRunCounter;
 const cityNameLabelXpath = "//*[contains(@class, 'css-cxl1tz')]";
 // const cityNameLabelXpath = "//*[@class='css-cxl1tz']"
 const infiltrateXpath = "//*[contains(text(), 'Infiltrate Company')]";
@@ -52,7 +54,8 @@ const cityCompanyDict = {
         { name: 'Clarke Incorporated', levels: 18, factionexp: 100 },
         { name: 'Rho Construction', levels: 5, factionexp: 100 },
         { name: 'Watchdog Security', levels: 7, factionexp: 100 },
-        { name: 'Galactic Cybersystems', levels: 12, factionexp: 100 }
+        { name: 'Galactic Cybersystems', levels: 12, factionexp: 100 },
+        { name: 'AeroCorp', levels: 12, factionexp: 100 }
     ], 'Sector-12': [
         { name: 'Alpha Enterprises', levels: 10, factionexp: 100 },
         { name: 'MegaCorp', levels: 31, factionexp: 166100 },
@@ -68,6 +71,7 @@ const cityCompanyDict = {
         { name: 'Omnia Cybersystems', levels: 22, factionexp: 7053 },
         { name: 'OmniTek Incorporated', levels: 25, factionexp: 100 },
         { name: 'Helios Labs', levels: 18, factionexp: 100 },
+        { name: 'NWO', levels: 18, factionexp: 222667, money: 3674669488 },
         { name: 'LexoCorp', levels: 15, factionexp: 100 },
         { name: 'CompuTek', levels: 15, factionexp: 100 }
     ], 'Chongqing': [
@@ -106,6 +110,8 @@ export async function main(ns) {
     let companyToInfiltrate = ns.args[0];
     let timesToRun = ns.args[1];
     let factionToIncrease = ns.args[2];
+    let dontGrind = ns.args[3];
+    if (factionToIncrease == 'none') factionToIncrease = null;
     if (companyToInfiltrate == 'all') {
         factionToIncrease = 'all';
         companyToInfiltrate = 'ECorp'; // static company - selecting one that would fit the best based on exp required, would be better
@@ -114,7 +120,7 @@ export async function main(ns) {
     if (!companyToInfiltrate) companyToInfiltrate = 'ECorp';
     if (!timesToRun) timesToRun = 9999999;
 
-    console.clear();
+    // console.clear();
 
     ns.tprint('Starting infiltration loop. Press Escape to stop.');
     console.log('Starting infiltration loop. Press Escape to stop.');
@@ -149,6 +155,8 @@ export async function main(ns) {
 
             if (seeSellFor) {
                 successful++;
+                infiRunCounter ? infiRunCounter++ : infiRunCounter = 1;
+                localStorage.setItem('infiRunCounter', infiRunCounter);
 
                 let msg = '';
                 if (factionToIncrease) {
@@ -156,12 +164,12 @@ export async function main(ns) {
                     let faction = factionToIncrease;
                     let runsLeft;
                     if (factionToIncrease === 'all') {
-                        console.log('looking for a faction to trade for');
+                        //console.log('looking for a faction to trade for');
                         // blind iteration cause no Singularity
                         let f;
                         while (f = factions[0]) {
                             // console.log(f);
-                            console.log('checking ' + f.name);
+                            // console.log('checking ' + f.name);
                             // const f = Object.values(factions)[0];
                             let listElement = textEqualsXpath(f.name, 'li');
                             if (listElement) {
@@ -185,7 +193,7 @@ export async function main(ns) {
                         else factionToIncrease = null; // lets continue grinding money!
                     }
                     else {
-                        if (successful == timesToRun) {
+                        if (successful == timesToRun && dontGrind != 'dontGrind') {
                             ns.tprint("Faction runs finished. Grinding money");
                             factionToIncrease = null; timesToRun = 99999;
                         }
@@ -207,9 +215,7 @@ export async function main(ns) {
                     await clickByXpath(sellForXpath);
                 }
                 msg += ` Took: ${timeTakenInSeconds(startDate, new Date())}s. Successful: ${successful} / ${count}`;
-                msg = msg.trimStart();
-                console.log(msg);
-                ns.toast(msg);
+                log(ns, msg.trimStart(), 'success');
                 await ns.sleep(200);
             }
             else if (seeLevel || seeEnterScreen) {
@@ -219,8 +225,9 @@ export async function main(ns) {
             else {
                 startDate = new Date();
                 count++;
-                console.log('Started infiltration ' + count);
-                ns.tprint('Started infiltration ' + count);
+                log(ns, 'Running infiltration ' + count + '/' + timesToRun, 'info', 75 * 1000);
+                // console.log('Started infiltration ' + count);
+                // ns.tprint('Started infiltration ' + count);
                 await startInfiltration(ns, companyToInfiltrate);
                 await ns.sleep(500);
             }
@@ -236,14 +243,7 @@ export async function main(ns) {
         }
     }
 }
-function timeTakenInSeconds(startDate, endDate) {
-    const startTime = startDate.getTime();
-    const endTime = endDate.getTime();
-    const timeDifferenceInMilliseconds = endTime - startTime;
-    const timeDifferenceInSeconds = Math.floor(timeDifferenceInMilliseconds / 1000);
 
-    return timeDifferenceInSeconds;
-}
 function invokeMouseDownEvent(targetElement) {
     if (!targetElement) {
         console.log("No element found at the given coordinates.");
@@ -341,4 +341,3 @@ function findElementByAriaLabel(label) {
     const result = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     return result.singleNodeValue;
 }
-

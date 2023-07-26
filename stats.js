@@ -1,3 +1,4 @@
+import { numberOfPortsOpenable } from 'common.js'
 
 /**
  * @param {NS} ns
@@ -48,22 +49,16 @@ export async function main(ns) {
       hook0.innerText += "\nPorts";
       hook1.innerText += `\n${numberOfPortsOpenable(ns)}`;
     }
+
+    hook0.innerText += "\nSingl running";
+    if (ns.isRunning('singl.js'))
+      hook1.innerText += "\nYES";
+    else
+      hook1.innerText += "\nNO";
+
+    hook0.innerText += "\nInfi runs";
+    hook1.innerText += `\n${localStorage.getItem('infiRunCounter')}`;
+
     await ns.sleep(1000);
   }
-}
-
-/** @param {NS} ns */
-export function numberOfPortsOpenable(ns) {
-  let count = 0;
-  if (ns.fileExists('BruteSSH.exe', 'home'))
-    count++;
-  if (ns.fileExists('FTPCrack.exe', 'home'))
-    count++;
-  if (ns.fileExists('relaySMTP.exe', 'home'))
-    count++;
-  if (ns.fileExists('HTTPWorm.exe', 'home'))
-    count++;
-  if (ns.fileExists('SQLInject.exe', 'home'))
-    count++;
-  return count;
 }
