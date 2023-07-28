@@ -16,17 +16,20 @@ export async function main(ns) {
   ns.disableLog("ALL");
   let path = await recursive_lookup(ns, 'home', visited, target);
   if (path instanceof (Array)) {
-    ns.tprint(path.reverse());
+    path.reverse();
+    // ns.tprint(path.reverse());
     const command = 'home;connect ' + path.join(';connect ') + "; run BruteSSH.exe ; run FTPCrack.exe ; run relaySMTP.exe ; run HTTPWorm.exe ; run SQLInject.exe ; run NUKE.exe ; backdoor";
     
     // navigator.clipboard.writeText(command);
-    ns.tprint(command);
+    // ns.tprint(command);
     const terminalInput = document.getElementById("terminal-input");
     const handler = Object.keys(terminalInput)[1];
     terminalInput.value = command;
+    // Perform an onChange event to set some internal values.
     terminalInput[handler].onChange({ target: terminalInput });
-    terminalInput[handler].onKeyDown({ keyCode: 13, preventDefault: () => null });
-    // ns.tprint(path.reverse().join(' -> '));
+    // Simulate an enter press
+    terminalInput[handler].onKeyDown({ key: 'Enter', preventDefault: () => null });
+  
   }
   else ns.tprint("Server not found! Check spelling.");
 

@@ -1,3 +1,4 @@
+// early game hacks
 /** @param {NS} ns */
 export async function main(ns) {
   const args = ns.flags([['help', false]]);
