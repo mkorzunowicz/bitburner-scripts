@@ -1,0 +1,7 @@
+{
+    "javascript.preferences.importModuleSpecifier": "non-relative",
+    "files.exclude": {
+        "jsconfig.json": true,
+        "index.d.ts": true,
+    }
+}
