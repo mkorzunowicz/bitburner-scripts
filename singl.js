@@ -1,4 +1,4 @@
-import { log, timeTakenInSeconds, formatDuration, startScript, numberOfPortsOpenable } from 'common.js'
+import { log, timeTakenInSeconds, crackPorts, jumpTo, formatDuration, startScript, numberOfPortsOpenable, findNextBitNode, clickByXpath } from 'common.js'
 
 const wnd = eval("window");
 const doc = wnd["document"];
@@ -8,11 +8,14 @@ let singlRunNumber;
 
 /** @param {NS} ns */
 export async function main(ns) {
+  startScript(ns, "infi.js");
+  // if (startScript(ns, "infi.js")) log(ns, "Infiltration automated.");
   if (!singlRunNumber) singlRunNumber = 1;
   // const resetInfo = ns.getResetInfo(); const lastAugReset = resetInfo.lastAugReset; ns.tprint(`The last augmentation reset was: ${new Date(lastAugReset)}`); ns.tprint(`It has been ${Date.now() - lastAugReset}ms since the last augmentation reset.`);
   shouldRun = true;
   //TODO: 1. calculate the max amount of ram and possible speed per second that we can achieve + cost 
   // 2. calculate the number of infi runs to predict the time it will take + display when to reload because of lag
+
   ns.disableLog('ALL');
   let force = ns.args[0];
   const infi = new Infiltration(ns);
@@ -43,21 +46,21 @@ export async function main(ns) {
   if (force || !ns.hasTorRouter() || numberOfPortsOpenable(ns) < 5) {
     await runIntro(ns, infi, runNumber);
   }
-
-  // if (runNumber < 8) {
-  if (ns.getPlayer().skills.hacking < 4500) {
-    stopExpandingServers(ns);
-  }
+  await killW0r1dD43m0n(ns);
+  // // if (runNumber < 8) {
+  // if (ns.getPlayer().skills.hacking < 2500) {
+  //   stopExpandingServers(ns);
+  // }
   await grindAugmentations(ns, infi, runNumber);
-
-  for (const factionname of ns.singularity.checkFactionInvitations()) {
-    if (ns.singularity.joinFaction(factionname) && shouldRun)
-      log(ns, `Joined: ${factionname}`, 'warning');
-  }
 
   if (!shouldRun) {
     log(ns, 'Escape key pressed. Cancelling singl.js', 'error');
     return;
+  }
+
+  for (const factionname of ns.singularity.checkFactionInvitations()) {
+    if (ns.singularity.joinFaction(factionname))
+      log(ns, `Joined: ${factionname}`, 'warning');
   }
 
   while (ns.singularity.upgradeHomeRam())
@@ -119,6 +122,7 @@ async function runIntro(ns, infi, runNumber) {
   ns.singularity.purchaseAugmentation('Shadows of Anarchy', 'SoA - phyzical WKS harmonizer');
 
   if (runNumber == 0) {
+    log(ns, 'Upgrading Home Ram and Cores!', 'info', 60 * 1000);
     Array.from({ length: 6 }, () => ns.singularity.upgradeHomeRam());
     Array.from({ length: 6 }, () => ns.singularity.upgradeHomeCores());
   }
@@ -143,10 +147,9 @@ async function grindAugmentations(ns, infi, runNumber) {
   if (runNumber < 5 && runNumber >= 3)
     prioFactions.push('The Black Hand', 'CyberSec', 'NiteSec');
 
-  while (ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length <= AUGS_PER_RUN && shouldRun) {
-    // while ((pl.factions.includes('Daedalus') && !ns.singularity.getOwnedAugmentations(true).includes('The Red Pill')) || ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < 8 && shouldRun) {
-    // so we grind until we install 8 new augmentations.. backdoor on world deamon gets installed automatically in backdoor_loop.js
-
+  while (shouldRun && ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < AUGS_PER_RUN) {
+    let installed = ns.singularity.getOwnedAugmentations(true).filter((aug) => !ns.singularity.getOwnedAugmentations().includes(aug));
+    if (installed.includes('QLink')) break;
     startScript(ns, "backdoor_loop.js");
     let invites = ns.singularity.checkFactionInvitations();
     for (const factionname of invites) {
@@ -186,21 +189,57 @@ async function grindAugmentations(ns, infi, runNumber) {
       pl = ns.getPlayer();
       continue;
     }
-    stopExpandingServers(ns);
 
-    await infi.grindRep(best);
-    if (!shouldRun) break;
-    await infi.grindMoney(best);
-    if (!shouldRun) break;
-    buyAugmentation(ns, best);
+    if (await infi.grindRep(best)) {
+      if (!shouldRun) break;
 
+      stopExpandingServers(ns); // stop before grinding money
+      await infi.grindMoney(best);
+
+      if (!shouldRun) break;
+      buyAugmentation(ns, best);
+    }
+
+
+    if (infiRunCount() > 20) {
+      // if (location.href.endsWith('?noScripts=true'))
+      //   log(ns, 'Should reload, but noScripts in href.. reload once with scripts!', 'warning', 10 * 1000);
+      // else {
+      log(ns, 'Waiting 31s to ensure saving the game and reloading to unclog Infiltration. Press ESC to cancel...', 'warning', 30 * 1000);
+      let counter = 31;
+      while (counter-- > 0 && shouldRun) {
+        ns.toast(counter, 'warning', 1000);
+        await ns.sleep(1000)
+      }
+      if (shouldRun) {
+        localStorage.setItem('infiRunCounter', 0);
+
+        location.assign(location.href.replace(/\?noScripts=true$/, ''));
+        // debugger;
+        // if (location.href.endsWith('?noScripts=true')) {
+        //   location.href = location.href.replace(/\?noScripts=true$/, '');
+        // }
+        // location.reload();
+        // }
+      }
+    }
+
+    await killW0r1dD43m0n(ns); // check and try to destroy the BitNode
+    if (ns.getPlayer().skills.hacking > 3000)
+      expandServers(ns);
     await ns.sleep(1000);
     pl = ns.getPlayer();
   }
 
+  if (shouldRun)
+    log(ns, `Got ${AUGS_PER_RUN}, checking leftover augs`, 'warning', 10 * 1000);
   let leftoverAugmentation;
-  while ((leftoverAugmentation = findAugmentationToBuy(ns, ns.getPlayer().money, true, false, prioFactions, false)) && shouldRun) {
+  while (shouldRun && (leftoverAugmentation = findAugmentationToBuy(ns, ns.getPlayer().money, true, true, prioFactions, false))) {
     // if we still have money to buy any hack augmentations.. but can grind rep
+    if (leftoverAugmentation.repRuns > 30) {
+      log(ns, `Leftover would take ${leftoverAugmentation.repRuns} to run.. skipping as it's more than 30`, 'warning', 10 * 1000);
+      break;
+    }
     await infi.grindRep(leftoverAugmentation);
     buyAugmentation(ns, leftoverAugmentation);
 
@@ -208,7 +247,11 @@ async function grindAugmentations(ns, infi, runNumber) {
     pl = ns.getPlayer();
   }
 }
-
+function infiRunCount() {
+  let infiCounter = localStorage.getItem('infiRunCounter');
+  if (infiCounter) return Number.parseInt(infiCounter);
+  else return 0;
+}
 /** @param {NS} ns */
 function buyAugmentation(ns, aug) {
   if (ns.singularity.purchaseAugmentation(aug.faction, aug.aug))
@@ -265,7 +308,7 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
       const isHacking = hacking_chance > 1 || hacking_speed > 1 || hacking_money > 1 || hacking_grow > 1 || hacking > 1 || hacking_exp > 1;
       // const isCombat = strength > 1 || strength_exp > 1 || dexterity > 1 || dexterity_exp > 1 || agility > 1 || agility_exp > 1 || defense > 1 || defense_exp > 1;
       const isCombat = strength > 1 || dexterity > 1 || agility > 1 || defense > 1; // let's exclude non exp only
-      if (hackingOnly && isCombat && aug != 'NeuroFlux Governor') continue;
+      if (hackingOnly && isCombat && !isHacking && aug != 'NeuroFlux Governor') continue;
       if (!allowNeuroFlux && aug == 'NeuroFlux Governor') continue; // let's skip non combat because of infiltration, but charisma and special add to augmentation number
 
       // if (hackingOnly && !isHacking) // hacking exclusively
@@ -290,13 +333,16 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
     }
   }
   // debugger;
-  const moneyRunsLimit = 30; // if we already have augmentations installed and they are crazy expensive.. put them at the bottom of the list
+  const moneyRunsLimit = 50; // if we already have augmentations installed and they are crazy expensive.. put them at the bottom of the list
   const sortedEntries = filteredEntries.sort((a, b) => {
     if (a.aug === 'Neuroreceptor Management Implant' && b.aug !== 'Neuroreceptor Management Implant') return -1; // not focused bonus from Tian Di Hui
     if (a.aug !== 'Neuroreceptor Management Implant' && b.aug === 'Neuroreceptor Management Implant') return 1; // not focused bonus from Tian Di Hui
 
     if (notInstalled > 0 && a.moneyRuns > moneyRunsLimit && b.moneyRuns <= moneyRunsLimit) return 1;
     else if (notInstalled > 0 && a.moneyRuns <= moneyRunsLimit && b.moneyRuns > moneyRunsLimit) return -1;
+    // it's mostly about QLink.. put it below.. that's a bit too harsh i'm afraid, even if it's going to take a long time
+    // if (a.moneyRuns > moneyRunsLimit && b.moneyRuns <= moneyRunsLimit) return 1;
+    // else if (a.moneyRuns <= moneyRunsLimit && b.moneyRuns > moneyRunsLimit) return -1;
 
     if (a.isNeuroFlux && !b.isNeuroFlux) return 1;
     else if (!a.isNeuroFlux && b.isNeuroFlux) return -1;
@@ -314,6 +360,41 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
   });
 
   return sortedEntries[0];
+}
+
+/** @param {NS} ns */
+async function killW0r1dD43m0n(ns) {
+  const target = 'w0r1d_d43m0n';
+  if (ns.getHackingLevel() > ns.getServerRequiredHackingLevel(target) && ns.singularity.getOwnedAugmentations().includes('The Red Pill')) {
+    if (!crackPorts(ns, target)) {
+      log(ns, `Couldn't crack ports on w0r1d_d43m0n`, 'warning', 1000 * 30);
+      return;
+    }
+    log(ns, `Killing BITNODE in 15 seconds. Press ESC to cancel. `, 'warning', 1000 * 30);
+    let counter = 16;
+    while (counter-- > 0 && shouldRun) {
+      ns.toast(counter, 'warning', 1000);
+      await ns.sleep(1000);
+    }
+    if (!shouldRun) return;
+
+    let next = findNextBitNode(ns);
+
+    // next = next + 1;
+    log(ns, `Killed BITNODE and starting next on ${next} `, 'warning', 1000 * 60 * 30);
+    ns.singularity.destroyW0r1dD43m0n(next, 'starter.js');
+    // jumpTo(ns, target);
+    // await ns.singularity.installBackdoor();
+    log(ns, `Killed BITNODE and starting next on ${next} `, 'warning', 1000 * 60 * 30);
+
+    counter = 5;
+    while (counter-- > 0)
+      await ns.sleep(1000);
+
+    // on some bitnodes there are descriptions which block further execution.. maybe this helps
+    clickByXpath("//*[contains(text(), 'Continue ...')]");
+
+  }
 }
 
 /** @param {NS} ns */
@@ -420,6 +501,7 @@ class Infiltration {
   async grindMoney(aug) {
     //$14.235b ECorp on BitNode 6 wihtouht combat augments
     //$14.235b with 8 fluxes... hmmmm
+    //$14.235b with The Black Hand and 76 Fluxes.. so fluxes don't influence this..
     const incomePerSecond = this.ns.getScriptIncome('ultimate_spread.js', 'home', 'noexpand');
     const secondsOfPassive = aug.price / incomePerSecond;
     // if (secondsToGrind < 60)
@@ -434,11 +516,13 @@ class Infiltration {
         const moneyToGather = aug.price - pl.money;
         let grindTarget = this.infiToGrind(moneyToGather);
         const grindIncomePerSecond = grindTarget.best.reward.sellCash / 80; //time is average.. could implement some counter for how many times the loop has ran so far
-        const secondsRequired = moneyToGather / (grindIncomePerSecond + secondsOfPassive);
-        const timesToRunWhilePassive = secondsRequired / 80;
+        const secondsRequired = moneyToGather / (grindIncomePerSecond + incomePerSecond);
+        const timesToRunWhilePassive = Math.ceil(secondsRequired / 80);
+        // log(this.ns, "Time till money is gathered: " + formatDuration(secondsRequired), 'warning', 30 * 1000);
 
-    // TODO calculate secondsPassive and time to grindInfi and run only the amount required
-        await this.grindInfiltration(aug, grindTarget.company, grindTarget.times, 'none');
+        // TODO calculate secondsPassive and time to grindInfi and run only the amount required
+        // await this.grindInfiltration(aug, grindTarget.company, grindTarget.times, 'none');
+        await this.grindInfiltration(aug, grindTarget.company, timesToRunWhilePassive, 'none');
       }
     }
   }
@@ -459,6 +543,7 @@ class Infiltration {
   /** @param {NS} ns */
   async grindRep(aug) {
     // fresh no combatskilled infiltration on ECorp gives 331.682k on BitNode 6
+    //331.682k with 76 fluxes and The Black Hand....
     let factionRep = this.ns.singularity.getFactionRep(aug.faction);
     if (aug.repreq > factionRep) {
       const facFavor = this.ns.singularity.getFactionFavor(aug.faction);
@@ -479,20 +564,29 @@ class Infiltration {
 
           if (this.ns.singularity.donateToFaction(aug.faction, moneyToBuyRep)) {
             log(this.ns, `Donated: ${this.ns.nFormat(moneyToBuyRep, "$0.0a")} to ${aug.faction} to buy ${required} rep`, 'warning');
-            return;
+            return true;
           }
         }
       }
 
       // figure out the number of times and/or target we need to run the faction grind
       const grindTarget = this.infiToGrind(null, aug.repreq - factionRep);
-      await this.grindInfiltration(aug, grindTarget.company, grindTarget.times, aug.faction);
+      return await this.grindInfiltration(aug, grindTarget.company, grindTarget.times, aug.faction);
     }
+    return true;
   }
   /** @param {NS} ns */
-  async grindInfiltration(aug, company, times, faction) {
-    log(this.ns, `Grinding ${faction == 'none' ? 'money' : 'rep'} on: ${company} ${times} times to buy ${aug.aug} in ${aug.faction}`, 'info', 80 * 1000 * times);
-    await this.infiltrate(company, times, faction);
+  async grindInfiltration(aug, company, times, faction, shouldTake = '') {
+    log(this.ns, `Grinding ${faction == 'none' ? 'money' : 'rep'} on: ${company} ${times} times to buy ${aug.aug} in ${aug.faction}. Should take: ${formatDuration(times * 70)}`, 'info', 80 * 1000 * times);
+
+    // if grind will take more than 20 runs, we want to allow it to reload.. so let's cap it, even if it will fail to buy the augmentation
+    let grindCount = infiRunCount() + times >= 20 ? 20 - infiRunCount() : times;
+    grindCount = grindCount < 1 ? 1 : grindCount;
+    if (times > 20)
+      log(this.ns, `Limiting grind count to ${grindCount}, otherwise would be ${times}`, 'warning', 15 * 1000);
+    await this.infiltrate(company, grindCount, faction);
+    if (times == grindCount) return true;
+    return false;
   }
 
   infiToGrind(requestedMoney, requestedReputation) {

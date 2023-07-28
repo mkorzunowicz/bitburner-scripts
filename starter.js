@@ -8,7 +8,8 @@ export async function main(ns) {
     startScript(ns, "stats.js")
   
     if (hasSingularity(ns)) {
-      Array.from({ length: 3 }, () => ns.singularity.upgradeHomeRam());
+      if (ns.getServerMaxRam('home') <= 32)
+        Array.from({ length: 3 }, () => ns.singularity.upgradeHomeRam());
       if (startScript(ns, "singl.js")) log(ns, "Starting singularity automation...");
     }
     else {
@@ -17,8 +18,8 @@ export async function main(ns) {
   }
   /** @param {NS} ns */
   async function infiltrate(ns, target, times, faction) {
-    if (ns.getPlayer().hp.current < ns.getPlayer().hp.max)
-      ns.singularity.hospitalize();
+    // if (ns.getPlayer().hp.current < ns.getPlayer().hp.max)
+    //   ns.singularity.hospitalize();
     const infiPid = ns.exec("infi_loop.js", 'home', 1, target, times, faction, 'dontGrind');
     if (infiPid != 0)
       log(ns, `${target} for ${times} times infiltration started...`);

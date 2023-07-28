@@ -32,7 +32,7 @@ let auto = false
 let repFaction = ''
 
 // Speed of game actions, in milliseconds.
-const speed = 15;
+const speed = 20;
 
 // Time infiltration(s)
 let infiltrationStart = 0
@@ -525,9 +525,9 @@ export async function main(ns) {
   repFaction = args.faction && args.faction && args.faction.length && args.faction
 
   print(
-    "Automated infiltration is enabled...\nWhen you visit the infiltration screen of any company, all tasks are completed automatically.\n" +
-    `Auto? ${auto}\n` +
-    `Faction or Money? ${repFaction || 'MONEY'}`
+    "Automated infiltration is enabled...\nWhen you visit the infiltration screen of any company, all tasks are completed automatically.\n"
+    // + `Auto? ${auto}\n`
+    // + `Faction or Money? ${repFaction || 'MONEY'}`
   );
 
   endInfiltration();
@@ -707,7 +707,7 @@ function playGame() {
   if (!screens.length) {
     wnd.info = { screens, messge: 'no screens.length, calling endInfiltration()' }
 
-    console.log('Last game type: ' + state.game.current);
+    // console.log('Last game type: ' + state.game.current);
     endInfiltration();
     selectCompany();
     return;
@@ -726,8 +726,8 @@ function playGame() {
   if (!h4.length) {
     wnd.info = { screens, message: 'no h4.length, calling endInfiltration()' }
 
-    console.log('Possibly game failed. Last game type: ' + state.game.current);
-    console.error('Possibly game failed. Last game type: ' + state.game.current);
+    // console.log('Possibly game failed. Last game type: ' + state.game.current);
+    // console.error('Possibly game failed. Last game type: ' + state.game.current);
     endInfiltration();
     return;
   }

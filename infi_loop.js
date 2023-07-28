@@ -1,4 +1,4 @@
-import { log, timeTakenInSeconds} from 'common.js'
+import { log, timeTakenInSeconds, clickByXpath, finByXpath } from 'common.js'
 
 // Small hack to save RAM.
 const wnd = eval("window");
@@ -300,40 +300,6 @@ function textContainsXpath(text, type) {
 
 function ariaXpath(text) {
     return `//*[@aria-label="${text}"]`;
-}
-
-async function clickElementTrusted(elem) {
-    // console.log(elem);
-    try {
-        await elem[Object.keys(elem)[1]].onClick({ isTrusted: true });
-    }
-    catch {
-
-        await elem[Object.keys(elem)[1]].onMouseDown({ isTrusted: true });
-    }
-}
-
-function finByXpath(xpath) {
-    return doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-}
-
-/** @param {NS} ns */
-async function clickByXpath(xpath, trusted) {
-    let element = finByXpath(xpath);
-    if (element) {
-        // Button found, do something with it
-        if (trusted)
-            await clickElementTrusted(element);
-        else
-            element.click(); // Example: Perform a click on the button
-        // console.log("Clicked by xpath: " + xpath);
-        return true;
-    } else {
-        // Button not found
-        console.log("Element to click not found.: " + xpath);
-        // ns.tprint("Button not found.");
-        return false;
-    }
 }
 
 function findElementByAriaLabel(label) {
