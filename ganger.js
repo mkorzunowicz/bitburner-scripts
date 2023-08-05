@@ -34,6 +34,9 @@ export async function main(ns) {
   while (shouldRun) {
     let members = ns.gang.getMemberNames().map(name => ns.gang.getMemberInformation(name));
 
+    for (let member of members)
+      ns.gang.setMemberTask(member.name, trainTask);
+    await recruit(ns);
     const workable = workableGangers(ns);
     const working = []
     if (workable.length > 0) {
@@ -52,27 +55,21 @@ export async function main(ns) {
         // sleep till we can recruit next ganger
         while (shouldRun && !ns.gang.canRecruitMember()) {
           ascend(ns);
+          buyAugs(ns);
           await ns.sleep(3000);
         }
         // let's reduce the wanted level
         for (let member of workable) {
           ns.gang.setMemberTask(member.name, antiWantedTask);
         }
-
-        while (ns.gang.canRecruitMember()) {
-          const names = ns.gang.getMemberNames(); //array
-          const name = "Ganger" + (names.length + 1);
-          if (ns.gang.recruitMember(name)) {
-            log(ns, 'Recruited: ' + name, 'info', 5 * 1000);
-            ns.gang.setMemberTask(name, trainTask);
-          }
-          await ns.sleep(100);
-        }
+        await recruit(ns);
         // sleep till wanted level drops to 1
         while (shouldRun && ns.gang.getGangInformation().wantedLevel > 1) {
           ascend(ns);
           await ns.sleep(3000);
         }
+        for (let member of workable)
+          ns.gang.setMemberTask(member.name, trainTask);
       }
       else {
         // work for money
@@ -88,12 +85,35 @@ export async function main(ns) {
       }
     }
     ascend(ns, false);
+    buyAugs(ns);
 
     // shouldRun = false;
     await ns.sleep(3000);
   }
 }
-
+/** @param {NS} ns */
+function buyAugs(ns) {
+  const members = ns.gang.getMemberNames().map(name => ns.gang.getMemberInformation(name));
+  for (let member of members) {
+    // total cost 20b
+    if (ns.getPlayer().money > 20 * ns.gang.getEquipmentCost('Neuralstimulator')) {
+      ns.gang.purchaseEquipment(member.name, 'Neuralstimulator');
+      ns.gang.purchaseEquipment(member.name, 'BitWire');
+      ns.gang.purchaseEquipment(member.name, 'DataJack');
+    }
+  }
+}
+async function recruit(ns) {
+  while (ns.gang.canRecruitMember()) {
+    const names = ns.gang.getMemberNames(); //array
+    const name = "Ganger" + (names.length + 1);
+    if (ns.gang.recruitMember(name)) {
+      log(ns, 'Recruited: ' + name, 'info', 5 * 1000);
+      ns.gang.setMemberTask(name, trainTask);
+    }
+    await ns.sleep(100);
+  }
+}
 /** @param {NS} ns */
 function ascend(ns, traineesOnly = true) {
   // Ascend
@@ -117,7 +137,7 @@ function ascend(ns, traineesOnly = true) {
 /** @param {NS} ns */
 function workableGangers(ns) {
   const members = ns.gang.getMemberNames().map(name => ns.gang.getMemberInformation(name));
-  return members.filter(obj => obj.hack > members.length * 250);
+  return members.filter(obj => obj.hack > members.length * 150);
   // return members.filter(obj => obj.hack > 2000);
 }
 
@@ -184,7 +204,7 @@ function shuffleArray(array) {
   // 320. OOOb
   // synthetic Heart
   // 325. OOOb
-  // Bi twi re
+  // BitWire
   // . OOOb
   // DataJack
   // 37 . 500b

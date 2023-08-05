@@ -185,8 +185,18 @@ export async function main(ns) {
     }
     // lets run
     // await run_script(ns, runningScripts, allServers.executingServers(), allServers.hackableSortedByHackingLevel(), allServers.runnableScriptThreads());
-    await run_script(ns, runningScripts, allServers.executingServers(), allServers.hackableSortedByByName());
-    await ns.sleep(50);
+    const execServs = allServers.executingServers();
+
+    run_script(ns, runningScripts, execServs, allServers.hackableSortedByByName());
+    // let threadsLeft = execServs.totalRunnableScriptThreads();
+    // while (threadsLeft > 0) {
+    //   await run_script(ns, runningScripts, execServs, allServers.hackableSortedByByName());
+    //   await ns.sleep(1);
+    //   let threadsLeft2 = execServs.totalRunnableScriptThreads();
+    //   if (threadsLeft == threadsLeft2) break;
+    //   threadsLeft = threadsLeft2;
+    // }
+    await ns.sleep(1);
   }
 }
 
@@ -196,7 +206,7 @@ export async function main(ns) {
  * @param {Hash<ServerAnalysis>} hackableServers Server to search through
  * @param {number} runnableScriptThreads Threads Server to search through
 */
-export async function run_script(ns, runningScripts, execServers, hackableServers) {
+function run_script(ns, runningScripts, execServers, hackableServers) {
   //0. based on the available threads, we need to see how many hacks we can run
   //1. check which script to run based on current security level and money available
   //2. run the script saving info when was it ran and how much time should it be executed.. 
@@ -218,10 +228,9 @@ export async function run_script(ns, runningScripts, execServers, hackableServer
       if (execServ.hackability.runnableScriptThreads <= 0) continue; // we depleted the runnable threads in a previous loop
 
       const thNo = Math.min(execServ.hackability.runnableScriptThreads, serverToHack.recommended.requiredThreads);
-
-      copyScripts(ns, ['hack.js', 'grow.js', 'weaken.js'], execServ.name);
+      ns.scp(['hack.js', 'grow.js', 'weaken.js'], execServ.name);
       crackPorts(ns, execServ.name);
-      let scriptPid = ns.exec(serverToHack.recommended.scriptName + '.js', execServ.name, thNo, 20, serverToHack.name);
+      let scriptPid = ns.exec(serverToHack.recommended.scriptName + '.js', execServ.name, thNo, 1, serverToHack.name);
       if (scriptPid != 0) {
         if (serverToHack.name == 'catalyst')
           ns.print(`Benchmark catalyst. Script: ${serverToHack.recommended.scriptName}runTime: ${serverToHack.recommended.runTime} threads: ${thNo} running on: ${execServ.name}`)
@@ -265,15 +274,24 @@ export async function recursive_scan(ns, serv, visited) {
  * @param {string} runningScripts Currently running scripts
  * */
 export function analyzeServer(ns, target, runningScripts, openablePorts) {
+
+  const analysis = new ServerAnalysis();
+  analysis.name = target;
+  // not sure this is correct
+  analysis.canExecute = target == 'home' || target.includes('pserv') || (ns.getServerNumPortsRequired(target) <= openablePorts && ns.getServerMaxRam(target) > 0);
+  // if (!analysis.canExecute)
+    // return analysis;
   // TODO: calc on home with more cores
   // TODO: maybe make a money/second and exp / second prognosis
+  const serv = ns.getServer(target);
   let moneyMax = ns.getServerMaxMoney(target);
   let moneyAvailable = ns.getServerMoneyAvailable(target);
   let growthThreads = 0;
   let moneyToMax;
   let securityIncreaseOnGrowth;
   let hackChance = ns.hackAnalyzeChance(target);
-  let hackThreads = Math.ceil(1 / ns.hackAnalyze(target));
+  let th = ns.hackAnalyze(target);
+  let hackThreads = th > 1000000 || th == 0 ? 1 : Math.ceil(1 / th);
 
   let securityIncreaseOnHack = ns.hackAnalyzeSecurity(hackThreads, target);
   let securityMin = ns.getServerMinSecurityLevel(target);
@@ -286,8 +304,9 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
     if (moneyAvailable == 0) moneyAvailable = 1; // this is kinda stupid, but infinity doesn't work, so :/
     let multiplier = moneyToMax / moneyAvailable;
     if (multiplier < 1 && multiplier > 0) multiplier = 1;
-    if (target != 'home') growthThreads = Math.ceil(ns.growthAnalyze(target, multiplier));
-    securityIncreaseOnGrowth = ns.growthAnalyzeSecurity(growthThreads);
+    if (multiplier == Infinity) multiplier = 1;
+    if (target != 'home') growthThreads = Math.ceil(ns.growthAnalyze(target, multiplier, serv.cpuCores));
+    securityIncreaseOnGrowth = ns.growthAnalyzeSecurity(growthThreads, target, serv.cpuCores); // TODO add cores on home
   }
   let growScriptRam = ns.getScriptRam('grow.js');
   let hackScriptRam = ns.getScriptRam('hack.js');
@@ -302,7 +321,8 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
   let usedRam = ns.getServerUsedRam(target);
   let maxRam = ns.getServerMaxRam(target);
   let availableRam = maxRam - usedRam;
-  if (target == 'home') availableRam -= 200; // just to save some space for other scripts
+  // if (target == 'home') availableRam -= 200; // just to save some space for other scripts
+  if (target == 'home') availableRam -= 2000; // For Corpo we need 1TB
 
   let requiredThreads;
   let runTime;
@@ -343,7 +363,7 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
           // if (Infinity == secLevelIncrease)
           //   requiredThreads = 1;
           // else
-          requiredThreads = threadsToWeaken(ns, secLevelIncrease);
+          requiredThreads = threadsToWeaken(ns, secLevelIncrease, serv.cpuCores);
           // requiredThreads = threadsToWeakenAfterHackAndGrow;
           runTime = timeWeaken;
         }
@@ -375,10 +395,10 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
         break;
     };
   }
-  const analysis = new ServerAnalysis();
-  analysis.name = target;
+  // const analysis = new ServerAnalysis();
+  // analysis.name = target;
   // not sure this is correct
-  analysis.canExecute = target == 'home' || target.includes('pserv') || (ns.getServerNumPortsRequired(target) <= openablePorts && ns.getServerMaxRam(target) > 0);
+  // analysis.canExecute = target == 'home' || target.includes('pserv') || (ns.getServerNumPortsRequired(target) <= openablePorts && ns.getServerMaxRam(target) > 0);
   // analysis.hackable = moneyMax != 0 && ns.getServerNumPortsRequired(target) <= openablePorts && requiredHackingLevel <= ns.getHackingLevel();
   analysis.hackable = moneyMax != 0 && ns.getServerNumPortsRequired(target) <= openablePorts && requiredHackingLevel <= ns.getHackingLevel() && recommendedScript != 'skip';
   analysis.weaken = {
@@ -428,23 +448,14 @@ export function analyzeServer(ns, target, runningScripts, openablePorts) {
 /** Calculates how many threads are required to decrease the security by this many levels
  * @param {NS} ns 
  * @param {number} securityLevelsToDecrease
+ * @param {number} cores
  * */
-export function threadsToWeaken(ns, securityLevelsToDecrease) {
+export function threadsToWeaken(ns, securityLevelsToDecrease, cores) {
   let threads = 0;
-  while (ns.weakenAnalyze(threads) < securityLevelsToDecrease) {
+  while (ns.weakenAnalyze(threads, cores) < securityLevelsToDecrease) {
     threads++;
   }
   return threads;
-}
-
-/** @param {NS} ns 
- * @param {Array<string>} scriptNames scripts to send
- * @param {string} target where to send
-*/
-export function copyScripts(ns, scriptNames, target) {
-  scriptNames.forEach((name) => {
-    ns.scp(name, target);
-  });
 }
 
 /** @param {NS} ns
@@ -452,6 +463,8 @@ export function copyScripts(ns, scriptNames, target) {
 */
 export async function crackPorts(ns, target) {
   try {
+    let t = ns.getServer(target);
+    if (t.hasAdminRights) return true;
     if (ns.fileExists('BruteSSH.exe', 'home'))
       ns.brutessh(target);
     if (ns.fileExists('FTPCrack.exe', 'home'))
@@ -462,6 +475,9 @@ export async function crackPorts(ns, target) {
       ns.httpworm(target);
     if (ns.fileExists('SQLInject.exe', 'home'))
       ns.sqlinject(target);
+
+    t = ns.getServer(target);
+    if (t.openPortCount < ns.getServerNumPortsRequired(target)) return false;
     ns.nuke(target);
     return true;
   }

@@ -52,13 +52,17 @@ export function formatDuration(seconds) {
  * @param {scriptName} name of the string to run (must include .js)
  * @param {param} parameter to pass, optional
  */
-export function startScript(ns, scriptName, param) {
+export function startScript(ns, scriptName, kill = false, param = null) {
   if (param) {
     if (!ns.isRunning(scriptName, 'home', param)) {
       if (ns.exec(scriptName, 'home', 1, param) != 0)
         return true;
+    } else {
+      ns.kill(scriptName, 'home', param);
+      if (ns.exec(scriptName, 'home', 1, param) != 0)
+        return true;
+      else return false;
     }
-    else return true;
   }
   else if (!ns.isRunning(scriptName, 'home')) {
     if (ns.exec(scriptName, 'home', 1) != 0)
@@ -67,7 +71,12 @@ export function startScript(ns, scriptName, param) {
     log(ns, `Couldn't start ${scriptName}!!!`, 'error');
     return false;
   }
-  else return true;
+  else {
+    ns.kill(scriptName, 'home');
+    if (ns.exec(scriptName, 'home', 1) != 0)
+      return true;
+    else return false;
+  }
 }
 
 
@@ -223,12 +232,12 @@ export function finByXpath(xpath) {
 }
 
 export async function clickElementTrusted(elem) {
-    // console.log(elem);
-    try {
-        await elem[Object.keys(elem)[1]].onClick({ isTrusted: true });
-    }
-    catch {
+  // console.log(elem);
+  try {
+    await elem[Object.keys(elem)[1]].onClick({ isTrusted: true });
+  }
+  catch {
 
-        await elem[Object.keys(elem)[1]].onMouseDown({ isTrusted: true });
-    }
+    await elem[Object.keys(elem)[1]].onMouseDown({ isTrusted: true });
+  }
 }

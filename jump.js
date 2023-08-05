@@ -38,7 +38,11 @@ export async function main(ns) {
   else ns.tprint("Server not found! Check spelling.");
 
 }
-
+export function autocomplete(data, args) {
+    return [...data.servers]; // This script autocompletes the list of servers.
+    // return [...data.servers, ...data.scripts]; // Autocomplete servers and scripts
+    // return ["low", "medium", "high"]; // Autocomplete 3 specific strings.
+}
 /** @param {NS} ns 
  * @param {string} serv Server to search through
  * @param {Array<string>} visited Already visited servers

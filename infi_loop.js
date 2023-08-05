@@ -100,6 +100,23 @@ const cityCompanyDict = {
         return null; // Return null if name is not found
     }
 };
+
+export function autocomplete(data, args) {
+    // would be nice if it added \"
+    let vals = Object.values(cityCompanyDict).filter((value) => typeof value !== 'function');
+    let companies = vals.flatMap(cityCompanies => cityCompanies.map(company => company.name));
+    let fs = addQuotesToNames(Object.values(factions).map(faction=> faction.name));
+    return [...companies, ...fs]; 
+}
+function addQuotesToNames(namesArray) {
+  return namesArray.map((name) => {
+    if (name.includes(' ')) {
+      return `"${name}"`;
+    } else {
+      return name;
+    }
+  });
+}
 function findCompanyToHackForFaction(company) {
     // TODO with singularity?
 }
@@ -141,9 +158,7 @@ export async function main(ns) {
         doc.removeEventListener('keydown', handleEscapeKey);
 
         let msg = `Looped Infiltration ended. Successful: ${successful} / ${count}`;
-
-        ns.tprint(msg);
-        console.log(msg);
+        log(ns, msg);
     });
     let startDate;
     let playerFactions = ns.getPlayer().factions; // TODO instead of iterating through all, we could use the joined ones
@@ -218,7 +233,11 @@ export async function main(ns) {
                 log(ns, msg.trimStart(), 'success');
                 await ns.sleep(200);
             }
-            else if (seeLevel || seeEnterScreen) {
+            else if (seeEnterScreen) {
+                await clickByXpath(textContainsXpath("Start"));
+                // console.log("running..");
+                await ns.sleep(500);
+            } else if (seeLevel) {
                 // console.log("running..");
                 await ns.sleep(500);
             }

@@ -1,11 +1,12 @@
 import { numberOfPortsOpenable } from 'common.js'
-
+const wnd = eval("window");
+const doc = wnd["document"];
 /**
  * @param {NS} ns
  **/
 export async function main(ns) {
   ns.disableLog('ALL');
-  const doc = eval('document')
+  // const doc = eval('document')
   const hook0 = doc.getElementById('overview-extra-hook-0')
   const hook1 = doc.getElementById('overview-extra-hook-1')
   if (!hook0 || !hook1) {

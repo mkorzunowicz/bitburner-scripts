@@ -10,7 +10,8 @@ export async function main(ns) {
     await university(ns);
 
     // TODO: with most of the augmentations up to Daedalus i am missing small values of Agility just before being invited to The Covenant - needs 850 all skills, Illuminati needs 1200
-
+    // TODO: some smart way to select when to grind it
+    // await gym(ns, 1200);
     // so the problem is - the more Combat skills i have, the lower Infiltration rewards
     await gym(ns);
     await commitHomicide(ns);
@@ -104,8 +105,8 @@ async function createPrograms(ns) {
 /** @param {NS} ns */
 async function university(ns, level = 300) {
     if (ns.getPlayer().skills.hacking < level) {
-        ns.singularity.travelToCity('Sector-12');
-        if (ns.singularity.universityCourse('Rothman University', 'Algorithms course', false))
+        ns.singularity.travelToCity('Volhaven');
+        if (ns.singularity.universityCourse('ZB Institute of Technology', 'Algorithms course', false))
             log(ns, "Starting Alghoritms course");
         else
             log(ns, "Couldn't start learning Algorithms !!!", 'error');
@@ -186,7 +187,7 @@ async function waitToStartGang(ns) {
         else
             log(ns, "Couldn't start a gang at " + gangToJoin, 'error');
     }
-    if (startScript(ns, 'ganger.js'))
+    if (startScript(ns, 'ganger.js', true))
         log(ns, 'Starting ganger.js ' + 'success');
 }
 

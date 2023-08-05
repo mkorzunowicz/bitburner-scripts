@@ -1,4 +1,4 @@
-import { log, numberOfPortsOpenable, jumpTo, recursive_scan, crackPorts } from 'common.js'
+import { log, numberOfPortsOpenable, jumpTo, recursive_scan, crackPorts } from 'common'
 
 /** @param {NS} ns */
 export async function main(ns) {
