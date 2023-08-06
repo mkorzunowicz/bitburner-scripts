@@ -19,10 +19,13 @@ export async function main(ns) {
           // are we in gang already? if yes, grind combat for covenant  and illuminati through shared exp
           if (ns.heart.break() < -54000) {
             let me = ns.getPlayer();
-            if (!me.factions.includes('The Covenant'))
-              workout(ns, s, me, 850);
-            else if (!me.factions.includes('Illuminati'))
-              workout(ns, s, me, 1200); //illuminati
+            // if (!me.factions.includes('The Covenant'))
+            if (!isCombatExpert(me, 850))
+              workout(ns, s, sl, 850, me);
+            // else if (!me.factions.includes('Illuminati'))
+            else if (!isCombatExpert(me, 1200))
+              workout(ns, s, sl, 1200, me); //illuminati
+            else homi(ns, s);
             // else {
             //   fieldWork(ns,s,'Illuminati');
             // }
@@ -60,7 +63,7 @@ export async function main(ns) {
   
   /** @param {SleevePerson} sl */
   function isCombatExpert(sl, level) {
-    return sl.skills.strength > level && sl.skills.defense > level && sl.skills.dexterity > level && sl.skills.agility > level;
+    return sl.skills.strength >= level && sl.skills.defense >= level && sl.skills.dexterity >= level && sl.skills.agility >= level;
   }
   /** @param {NS} ns */
   function homi(ns, s) {
@@ -76,10 +79,10 @@ export async function main(ns) {
   }
   /** @param {NS} ns 
   @param {SleevePerson} sl */
-  function workout(ns, s, sl, level) {
+  function workout(ns, s, sl, level, me) {
     if (sl.city != 'Sector-12')
       ns.sleeve.travel(s, 'Sector-12');
-  
+    if (me) sl = me;
     if (sl.skills.strength < level) {
       ns.sleeve.setToGymWorkout(s, 'Powerhouse Gym', 'Strength');
       return;

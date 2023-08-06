@@ -1,6 +1,6 @@
 /** Run this script on your home machine. It will run in a loop to fetch all the servers in the network
  *  analyze them. Figure out which ones can be hacked and which can be used to hack. Then spreads the scripts around
- *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are run to not overlap. It's moneymaking optimal. Not sure if exp making optimal.
+ *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are run to not overlap. It's really hard to make this optimal.
  * @param {NS} ns */
 export async function main(ns) {
 
@@ -21,13 +21,12 @@ export async function main(ns) {
   
   /** @param {NS} ns 
    * @param {Servers} allServers Server to search through
-   * @param {Hash<ServerAnalysis>} execServers Server to search through
-   * @param {Hash<ServerAnalysis>} hackableServers Server to search through
-   * @param {number} runnableScriptThreads Threads Server to search through
   */
   function run_script(ns, allServers) {
     let threadsLeft = allServers.totalRunnableScriptThreads();
-    const hackable = allServers.hackable();
+  
+    const hackable2 = allServers.sortByHackingLevelDesc();
+    const hackable = allServers.sortByMoneyFlowRate();
     const totalThreadsRequired = allServers.totalThreadsRequired();
     while (threadsLeft > 0) {
       const serverToHack = hackable.shift();
@@ -98,18 +97,8 @@ export async function main(ns) {
           if (scriptPid != 0) {
             // if (serverToHack.name == 'catalyst')
             //   ns.print(`Benchmark catalyst. Script: ${serverToHack.recommended.scriptName}runTime: ${serverToHack.recommended.runTime} threads: ${thNo} running on: ${execServ.name}`)
-            // if (!allServers.runningScripts[serverToHack.name]) allServers.runningScripts[serverToHack.name] = [];
-            // allServers.runningScripts[serverToHack.name].push({
-            //   //  pid: scriptPid,
-            //   type: serverToHack.recommended.scriptName,
-            //   //  startedAt: new Date(),
-            //   //  hackedOn: execServ.name,
-            //   // threads: thNo,
-            //   // runTime: serverToHack.recommended.runTime,
-            //   endsAt: new Date(new Date().getTime() + serverToHack.recommended.runTime)
-            // });
-  
-            allServers.runningScripts[serverToHack.name] = {
+            if (!allServers.runningScripts[serverToHack.name]) allServers.runningScripts[serverToHack.name] = [];
+            allServers.runningScripts[serverToHack.name].push({
               //  pid: scriptPid,
               type: serverToHack.recommended.scriptName,
               //  startedAt: new Date(),
@@ -117,7 +106,17 @@ export async function main(ns) {
               // threads: thNo,
               // runTime: serverToHack.recommended.runTime,
               endsAt: new Date(new Date().getTime() + serverToHack.recommended.runTime)
-            };
+            });
+  
+            // allServers.runningScripts[serverToHack.name] = {
+            //   //  pid: scriptPid,
+            //   type: serverToHack.recommended.scriptName,
+            //   //  startedAt: new Date(),
+            //   //  hackedOn: execServ.name,
+            //   // threads: thNo,
+            //   // runTime: serverToHack.recommended.runTime,
+            //   endsAt: new Date(new Date().getTime() + serverToHack.recommended.runTime)
+            // };
             execServ.hackability.runnableScriptThreads -= thNo;
             threadsLeft -= thNo;
           }
@@ -171,11 +170,11 @@ export async function main(ns) {
       }
     }
     update() {
-      // this.runningScriptsCleanup();
+      this.runningScriptsCleanup();
       if (this.numberOfPortsOpenable < 5)
         this.numberOfPortsOpenable = ServerAnalysis.numberOfPortsOpenable(this.ns);
       for (const serv of this.allServers) {
-        serv.update(this.runningScripts[serv.name], this.numberOfPortsOpenable)
+        serv.update(this.runningScripts[serv.name], this.numberOfPortsOpenable, this.ns.getServer('home').cpuCores)
       }
     }
   
@@ -217,10 +216,14 @@ export async function main(ns) {
       }
       return hackable;
     };
+    sortByMoneyFlowRate() {
+      return this.hackable().sort((a, b) => b.moneyFlowRate - a.moneyFlowRate);
+    };
+    sortByHackingLevelDesc() {
+      return this.hackable().sort((a, b) => b.hackability.requiredHackingLevel - a.hackability.requiredHackingLevel);
+    };
     sortByHackingLevel() {
-      return this.hackable().sort((a, b) => {
-        a.hackability.requiredHackingLevel - b.hackability.requiredHackingLevel;
-      });
+      return this.hackable().sort((a, b) => a.hackability.requiredHackingLevel - b.hackability.requiredHackingLevel);
     };
   
     totalRunnableScriptThreads() {
@@ -273,9 +276,17 @@ export async function main(ns) {
       };
   
       ns.scp(['hack.js', 'grow.js', 'weaken.js'], target, 'home');
-      this.update(null, ServerAnalysis.numberOfPortsOpenable(ns));
+      // this.update(null, ServerAnalysis.numberOfPortsOpenable(ns));
     };
-    update(lastScript, openablePorts) {
+  
+    /** Updates the Server information with current state. 
+     * And proposes a recommended next script based on the previous script that was/is running.
+     * It's also somewhat optimal, but probably far from it.
+     * @param {Array} runningScripts 
+     * @param {number} openablePorts 
+     * @param {number} homeCores 
+     * */
+    update(runningScripts, openablePorts, homeCores) {
       const target = this.name;
       this.moneyMax = this.ns.getServerMaxMoney(target);
       this.securityMin = this.ns.getServerMinSecurityLevel(target);
@@ -304,8 +315,8 @@ export async function main(ns) {
         this.crackPorts(this.ns, this.name);
   
       // const cores = this.cpuCores;
-      const cores = 8;
-      // const cores = this.ns.getServer('home').cpuCores; // this made the script perfore worse? at least on exp
+      // const cores = 8;
+      const cores = homeCores; // this made the script perform worse? at least on exp
   
       let moneyAvailable = this.ns.getServerMoneyAvailable(target);
       let growthThreads = 0;
@@ -325,24 +336,32 @@ export async function main(ns) {
         if (target != 'home') growthThreads = Math.ceil(this.ns.growthAnalyze(target, multiplier, cores));
         securityIncreaseOnGrowth = this.ns.growthAnalyzeSecurity(growthThreads, target, cores); // TODO add cores on home
       }
-  
       let requiredThreads;
       let runTime;
       let recommendedScript = 'hack';
-      if (!lastScript) lastScript = { type: 'hack' };
+      let lastScript;
+      if (!runningScripts || runningScripts.length == 0 || !runningScripts[runningScripts.length - 1])
+        // lastScript = { type: 'weaken' };
+        if (moneyAvailable != this.moneyMax && growthThreads > 0) lastScript = { type: 'hack' };
+        else {
+          if (this.ns.getServerSecurityLevel(target) != this.securityMin) lastScript = { type: 'grow' };
+          else lastScript = { type: 'weaken' };
+        }
+      else lastScript = runningScripts[runningScripts.length - 1];
+  
       switch (lastScript.type) {
         case 'weaken':
           {
             recommendedScript = 'hack';
             requiredThreads = hackThreads;
-            runTime = Math.ceil(this.ns.getHackTime(target));;
+            runTime = Math.ceil(this.ns.getHackTime(target));
           }
           break;
         case 'hack':
           {
             recommendedScript = 'grow';
             requiredThreads = growthThreads;
-            runTime = Math.ceil(this.ns.getGrowTime(target));;
+            runTime = Math.ceil(this.ns.getGrowTime(target));
           }
           break;
         case 'grow':
@@ -366,6 +385,7 @@ export async function main(ns) {
           break;
       };
   
+      this.moneyFlowRate = this.moneyMax / runTime;
       this.recommended = {
         scriptName: recommendedScript,
         scriptNameExt: recommendedScript + '.js',
@@ -373,6 +393,8 @@ export async function main(ns) {
         runTime: runTime
       };
     }
+    /** Installs hacks if enough is availabale 
+     * @param {number} numberOfPortsOpenable */
     crackPorts(numberOfPortsOpenable) {
       if (this.hackability.portsRequired < numberOfPortsOpenable) return;
       if (ServerAnalysis.hackTools.brutessh)
@@ -389,7 +411,7 @@ export async function main(ns) {
       this.ns.nuke(this.name);
       this.hackability.hasAdminRights = true;
     }
-  
+    /** Hack tools available on the system, but is static so needs to be refreshed on code start.  */
     static hackTools = {
       brutessh: false,
       ftpcrack: false,
@@ -398,8 +420,10 @@ export async function main(ns) {
       sqlinject: false,
     };
     static portsOpenable = 0;
+    /** calculates and updates the amount of Ports we can open. So which Hack tools are available. It checks and updates all.
+     * @param {NS} ns */
     static numberOfPortsOpenable(ns) {
-      if (ServerAnalysis.portsOpenable == 5) return 5;
+      // if (ServerAnalysis.portsOpenable == 5) return 5;
       let count = 0;
       if (!ServerAnalysis.hackTools.brutessh)
         if (ns.fileExists('BruteSSH.exe', 'home'))
@@ -438,7 +462,7 @@ export async function main(ns) {
    * */
   function threadsToWeaken(ns, securityLevelsToDecrease, cores) {
     if (securityLevelsToDecrease == 0) return 1;
-  
+    // this also made the code run worse for whatever reason when a lot of ram is there
     // let levelDecreasedOnSingleThread = ns.weakenAnalyze(1, cores);
     // return Math.ceil(securityLevelsToDecrease / levelDecreasedOnSingleThread);
     let threads = 1;

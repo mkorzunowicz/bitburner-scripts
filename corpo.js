@@ -1,13 +1,215 @@
 import { log } from 'common.js'
+const _1b = 1_000_000_000;
+const _1m = 1_000_000;
+let shouldRun;
+/** Corporations are weird in this version... it doesn't match the document given well.. seems the Corporation gets less money when finding investors
+ * On top of that, the Tobacco business isn't working.. The profits are ways smaller
+ * @param {NS} ns */
+export async function main(ns) {
+
+    // doesn't need API access - could be put outside before 
+    // ns.corporation.hasCorporation();
+    // the document is a bit outda
+    //https://docs.google.com/document/d/e/2PACX-1vTzTvYFStkFjQut5674ppS4mAhWggLL5PEQ_IbqSRDDCZ-l-bjv0E6Uo04Z-UfPdaQVu4c84vawwq8E/pub
+    shouldRun = true;
+    debugger;
+
+    // Agriculture
+    let divName = 'Ags';
+    if (!startCorpo(ns, divName)) return;
+
+    if (!shouldRun) return;
+
+    // let corp = ns.corporation.getCorporation();
+    // if (corp.revenue < 2000000)
+    //     await roundOne(ns);
+    // if (corp.revenue < 3000000)
+    //     await roundTwo(ns);
+    // if (corp.revenue < 11000000)
+    //     await roundTwoAndHalf(ns);
+
+    // if (corp.revenue < 11000000)
+    //     await roundThree(ns);
+    // this sums up agriculture for now
+
+    // await setupTobacco(ns);
+    while (shouldRun) {
+        await bumpMoraleAndEnergy(ns);
+        await ns.sleep(5000);
+    }
+}
 
 /** @param {NS} ns */
-export async function main(ns) {
-    debugger;
+async function setupTobacco(ns) {
+
     const cities = ['Aevum', 'Sector-12', 'Volhaven', 'Chongqing', 'New Tokyo', 'Ishima']
-    let divName = 'Ags';
+    let div = 'Tabak';
+    let corp = ns.corporation.getCorporation();
+    if (!corp.divisions.includes(div)) {
+        ns.corporation.expandIndustry('Tobacco', div);
+        let divi = ns.corporation.getDivision(div);
+
+        for (let city of cities) {
+            if (divi.cities.includes(city)) {
+                hireStaff(ns, div, city, 6, 6, 6, 6, 6, 1);
+                ns.corporation.makeProduct(div, city, 'Tabak v1', _1b, _1b);
+                //     // ns.corporation.sellMaterial(div, city, 'Plants', 'MAX', 'MP');
+                //     // ns.corporation.sellMaterial(div, city, 'Food', 'MAX', 'MP');
+                //     // ns.corporation.sellProduct(div, city, 'Food', 'MAX', 'MP');
+            }
+            else {
+                ns.corporation.expandCity(div, city);
+                ns.corporation.purchaseWarehouse(div, city);
+                hireStaff(ns, div, city, 2, 2, 1, 2, 2, 1);
+            }
+        }
+    }
+    return true;
+}
+/** @param {NS} ns */
+async function roundOne(ns) {
+    const cities = ['Aevum', 'Sector-12', 'Volhaven', 'Chongqing', 'New Tokyo', 'Ishima']
+    let corp = ns.corporation.getCorporation();
+    for (let div of corp.divisions) {
+        let divi = ns.corporation.getDivision(div);
+        if (divi.numAdVerts < 1)
+            ns.corporation.hireAdVert(div);
+        for (let city of cities) {
+            if (divi.cities.includes(city)) {
+                //     // ns.corporation.sellMaterial(div, city, 'Plants', 'MAX', 'MP');
+                //     // ns.corporation.sellMaterial(div, city, 'Food', 'MAX', 'MP');
+                //     // ns.corporation.sellProduct(div, city, 'Food', 'MAX', 'MP');
+            }
+            else {
+                ns.corporation.expandCity(div, city);
+                ns.corporation.purchaseWarehouse(div, city);
+            }
+        }
+    } if (!shouldRun) return;
+    upgrade(ns, ['FocusWires',
+        'Neural Accelerators',
+        'Speech Processor Implants',
+        'Nuoptimal Nootropic Injector Implants',
+        'Smart Factories'], 2);
+    if (!shouldRun) return;
+
+    corp = ns.corporation.getCorporation();
+    for (let div of corp.divisions) {
+        let divi = ns.corporation.getDivision(div);
+        for (let city of divi.cities) {
+            hireStaff(ns, div, city, 1, 1, 1, 0, 0, 0);
+            ns.corporation.setSmartSupply(div, city, true);
+
+            ns.corporation.sellMaterial(div, city, 'Plants', 'MAX', 'MP');
+            ns.corporation.sellMaterial(div, city, 'Food', 'MAX', 'MP');
+            bumpWarehouse(ns, div, city, 3);
+            buyToQuantity(ns, div, city, 'Hardware', 125);
+            buyToQuantity(ns, div, city, 'AI Cores', 75);
+            buyToQuantity(ns, div, city, 'Real Estate', 23000);
+        }
+    }
+    await bumpMoraleAndEnergy(ns, 'Ags');
+
+    if (!shouldRun) return;
+
+    // TDOO maybe add wait for good offer based on revenue    
+    // await findInvestors(ns, 150000000000); // it looks like we get 60b only
+    await findInvestors(ns, 60000000000, 2000000); // it looks like we get 60b only
+}
+
+/** @param {NS} ns */
+async function roundTwo(ns) {
+    let corp = ns.corporation.getCorporation();
+    upgrade(ns, ['Smart Storage', 'Smart Factories'], 4);
+    for (let div of corp.divisions) {
+        let divi = ns.corporation.getDivision(div);
+        for (let city of divi.cities) {
+            hireStaff(ns, div, city, 2, 2, 1, 2, 2, 1);
+            bumpWarehouse(ns, div, city, 4); // 5 * 150 = 560
+
+            buyToQuantity(ns, div, city, 'Hardware', 150);
+            buyToQuantity(ns, div, city, 'Robots', 20);
+            buyToQuantity(ns, div, city, 'AI Cores', 90);
+            buyToQuantity(ns, div, city, 'Real Estate', 27000);
+        }
+    }
+
+    await bumpMoraleAndEnergy(ns, 'Ags');
+    if (!shouldRun) return;
+
+    await findInvestors(ns, 200000000000, 3000000);
+}
+
+/** @param {NS} ns */
+async function roundTwoAndHalf(ns) {
+    let corp = ns.corporation.getCorporation();
+    upgrade(ns, ['Smart Storage', 'Smart Factories'], 11);
+    for (let div of corp.divisions) {
+        let divi = ns.corporation.getDivision(div);
+        for (let city of divi.cities) {
+            hireStaff(ns, div, city, 2, 2, 1, 2, 2, 1);
+            bumpWarehouse(ns, div, city, 11); // 10 * 200 = 2000
+
+            buyToQuantity(ns, div, city, 'Hardware', 2800);
+            buyToQuantity(ns, div, city, 'Robots', 96);
+            buyToQuantity(ns, div, city, 'AI Cores', 2520);
+            buyToQuantity(ns, div, city, 'Real Estate', 185400);
+        }
+    }
+
+    await bumpMoraleAndEnergy(ns, 'Ags');
+    if (!shouldRun) return;
+
+    await findInvestors(ns, 600000000000, 11000000);
+}
+
+/** @param {NS} ns */
+async function roundThree(ns) {
+    let corp = ns.corporation.getCorporation();
+    upgrade(ns, ['Smart Storage', 'Smart Factories'], 15);
+    for (let div of corp.divisions) {
+        let divi = ns.corporation.getDivision(div);
+        for (let city of divi.cities) {
+            // hireStaff(ns, div, city, 2, 2, 1, 2, 2, 1);
+            bumpWarehouse(ns, div, city, 13); // we want 2000
+
+            buyToQuantity(ns, div, city, 'Hardware', 9300);
+            buyToQuantity(ns, div, city, 'Robots', 726);
+            buyToQuantity(ns, div, city, 'AI Cores', 6270);
+            buyToQuantity(ns, div, city, 'Real Estate', 230400);
+        }
+    }
+
+    await bumpMoraleAndEnergy(ns, 'Ags');
+}
+/** @param {NS} ns */
+async function findInvestors(ns, amount, rev) {
+    let corp = ns.corporation.getCorporation();
+
+    if (corp.funds < 150000000000 && corp.revenue < rev) {
+
+        let offer = ns.corporation.getInvestmentOffer();
+        while (shouldRun && offer.funds < amount) {
+            await ns.sleep(1 * 1000);
+            offer = ns.corporation.getInvestmentOffer();
+        }
+        //TODO figure out profit vs offer and steps
+
+        if (shouldRun && offer.funds > amount) {
+            ns.corporation.acceptInvestmentOffer();
+            log(ns, `CORPO: Took an investment offer for ${offer.funds}`, 'success');
+        }
+    }
+}
+/** @param {NS} ns */
+function startCorpo(ns, divName) {
     let corp = ns.corporation.getCorporation();
     if (corp) {
-
+        if (!corp.divisions.includes(divName)) {
+            ns.corporation.expandIndustry('Agriculture', divName);
+            ns.corporation.purchaseUnlock('Smart Supply');
+        }
+        return true;
     }
     else {
         if (ns.getPlayer().money > 150000000000) { // with 150b we can start a corpo - we could grind it first and found it, shouldn't take longer than 15 infi grinds
@@ -16,77 +218,54 @@ export async function main(ns) {
                 corp = ns.corporation.getCorporation();
                 ns.corporation.expandIndustry('Agriculture', divName);
                 ns.corporation.purchaseUnlock('Smart Supply');
+                log(ns, 'Corpo PitaBurners started');
+                return true;
             }
-            log(ns, 'Corpo PitaBurners started');
+            log(ns, 'Corpo couldnt start', 'error');
+            return false;
         }
-
+        return false;
     }
-    // return
-
-    // Agriculture
-
-    for (let div of corp.divisions) {
-        let divi = ns.corporation.getDivision(div);
-        if (divi.numAdVerts < 1)
-            ns.corporation.hireAdVert(div);
-        for (let city of cities) {
-            if (divi.cities.includes(city)) {
-                ns.corporation.sellMaterial(div, city, 'Plants', 'MAX', 'MP');
-                ns.corporation.sellMaterial(div, city, 'Food', 'MAX', 'MP');
-                // ns.corporation.sellProduct(div, city, 'Food', 'MAX', 'MP');
-            }
-            else {
-                basicExpand(ns, div, city) ;
-                // ns.corporation.expandCity(div, city);
-                // ns.corporation.purchaseWarehouse(div, city);
-                // ns.corporation.upgradeWarehouse(div, city, 2);
-                // ns.corporation.hireEmployee(div, city, 'Operations');
-                // ns.corporation.hireEmployee(div, city, 'Engineer');
-                // ns.corporation.hireEmployee(div, city, 'Business');
-                // ns.corporation.setSmartSupply(div, city, true);
-
-                // ns.corporation.sellMaterial(div, city, 'Plants', 'MAX', 'MP');
-                // ns.corporation.sellMaterial(div, city, 'Food', 'MAX', 'MP');
-            }
-        }
-        // debugger
-    }
-    upgrade(ns, ['FocusWires', 'Neural Accelerators', 'Speech Processor Implants', 'Nuoptimal Nootropic Injector Implants', 'Smart Factories'], 2);
-
-    for (let div of corp.divisions) {
-        let divi = ns.corporation.getDivision(div);
-        for (let city of divi.cities) {
-            buyIfLess(ns, div, city, 'Hardware', 125);
-            buyIfLess(ns, div, city, 'AI Cores', 75);
-            buyIfLess(ns, div, city, 'Real Estate', 2700);
-
-            const office = ns.corporation.getOffice(div, city);
-            office.employeeJobs['Research & Development']
-        }
-    }
-
-    let offer = ns.corporation.getInvestmentOffer();
-    debugger
-    // ns.corporation.upgradeOfficeSize(divName, city, 3);
-    // ns.corporation.hireEmployee(divName, city, 'Management');
-    // ns.corporation.hireEmployee(divName, city, 'Training');
-    // ns.corporation.hireEmployee(divName, city, 'Research & Development');
-
-
 }
-/** @param {NS} ns */
-function basicExpand(ns, div, city) {
-    ns.corporation.expandCity(div, city);
-    ns.corporation.purchaseWarehouse(div, city);
-    ns.corporation.upgradeWarehouse(div, city, 2);
-    hireStaff(ns, div, city, 1, 1, 1, 0, 0, 0);
-    // ns.corporation.hireEmployee(div, city, 'Operations');
-    // ns.corporation.hireEmployee(div, city, 'Engineer');
-    // ns.corporation.hireEmployee(div, city, 'Business');
-    ns.corporation.setSmartSupply(div, city, true);
 
-    ns.corporation.sellMaterial(div, city, 'Plants', 'MAX', 'MP');
-    ns.corporation.sellMaterial(div, city, 'Food', 'MAX', 'MP');
+/** @param {NS} ns */
+async function bumpMoraleAndEnergy(ns, div) {
+    if (div) {
+
+        let avgs = ns.corporation.getDivision(div).cities.map(c => { let off = ns.corporation.getOffice(div, c); return { m: off.avgMorale, e: off.avgEnergy }; });
+
+        while (shouldRun && !avgs.every((avg) => avg.m > 99 && avg.e > 99)) {
+            let divi = ns.corporation.getDivision(div);
+            for (let city of divi.cities) {
+                const office = ns.corporation.getOffice(div, city);
+                if (office.avgEnergy < 99)
+                    ns.corporation.buyTea(div, city);
+                if (office.avgMorale < 99)
+                    ns.corporation.throwParty(div, city, 1000000)
+            }
+            await ns.sleep(500);
+            avgs = ns.corporation.getDivision(div).cities.map(c => { let off = ns.corporation.getOffice(div, c); return { m: off.avgMorale, e: off.avgEnergy }; });
+        }
+
+    }
+    let corp = ns.corporation.getCorporation();
+    for (let div of corp.divisions) {
+        let avgs = ns.corporation.getDivision(div).cities.map(c => { let off = ns.corporation.getOffice(div, c); return { m: off.avgMorale, e: off.avgEnergy }; });
+
+        while (shouldRun && !avgs.every((avg) => avg.m > 99 && avg.e > 99)) {
+            let divi = ns.corporation.getDivision(div);
+            for (let city of divi.cities) {
+                const office = ns.corporation.getOffice(div, city);
+                if (office.avgEnergy < 99)
+                    ns.corporation.buyTea(div, city);
+                if (office.avgMorale < 99)
+                    ns.corporation.throwParty(div, city, 1000000)
+            }
+            await ns.sleep(500);
+            avgs = ns.corporation.getDivision(div).cities.map(c => { let off = ns.corporation.getOffice(div, c); return { m: off.avgMorale, e: off.avgEnergy }; });
+        }
+    }
+
 }
 /** @param {NS} ns */
 function upgrade(ns, upgrades, level) {
@@ -97,39 +276,46 @@ function upgrade(ns, upgrades, level) {
 /** @param {NS} ns */
 function upgradeLevel(ns, upgrade, level) {
     let count = ns.corporation.getUpgradeLevel(upgrade);
-    for (let i = count; i++; i < level)
+    for (let i = count; i < level; i++)
         ns.corporation.levelUpgrade(upgrade);
 }
 
 /** @param {NS} ns */
-function buyIfLess(ns, div, city, mat, qty) {
-    if (ns.corporation.getMaterial(div, city, mat).qty < qty)
-        ns.corporation.bulkPurchase(div, city, mat, qty);
+function buyToQuantity(ns, div, city, mat, qty) {
+    let stored = ns.corporation.getMaterial(div, city, mat).stored;
+    if (stored < qty)
+        ns.corporation.bulkPurchase(div, city, mat, qty - stored);
 }
 
 /** @param {NS} ns */
-function hireStaff(ns, div, city, ops, engs, bus, mangs, ints, rds) {
+function bumpWarehouse(ns, div, city, level) {
+    let warehouse = ns.corporation.getWarehouse(div, city);
+    if (warehouse.level < level)
+        ns.corporation.upgradeWarehouse(div, city, level - warehouse.level);
+}
+/** @param {NS} ns */
+function hireStaff(ns, div, city, ops, engs, bus, mangs, rds, ints) {
     const office = ns.corporation.getOffice(div, city);
     let expectedSize = ops + engs + bus + mangs + ints + rds;
     if (office.size < expectedSize)
-        ns.corporation.upgradeOfficeSize(div, city, expectedSize);
+        ns.corporation.upgradeOfficeSize(div, city, expectedSize - office.size);
 
-    for (let i = office.employeeJobs.Business; i++; i < bus)
+    for (let i = office.employeeJobs.Business; i < bus; i++)
         ns.corporation.hireEmployee(div, city, 'Business');
 
-    for (let i = office.employeeJobs.Operations; i++; i < ops)
+    for (let i = office.employeeJobs.Operations; i < ops; i++)
         ns.corporation.hireEmployee(div, city, 'Operations');
 
-    for (let i = office.employeeJobs.Engineer; i++; i < engs)
+    for (let i = office.employeeJobs.Engineer; i < engs; i++)
         ns.corporation.hireEmployee(div, city, 'Engineer');
 
-    for (let i = office.employeeJobs.Training; i++; i < ints)
-        ns.corporation.hireEmployee(div, city, 'Training');
+    for (let i = office.employeeJobs.Intern; i < ints; i++)
+        ns.corporation.hireEmployee(div, city, 'Intern');
 
-    for (let i = office.employeeJobs.Management; i++; i < mangs)
+    for (let i = office.employeeJobs.Management; i < mangs; i++)
         ns.corporation.hireEmployee(div, city, 'Management');
 
-    for (let i = office.employeeJobs['Research & Development']; i++; i < rds)
+    for (let i = office.employeeJobs['Research & Development']; i < rds; i++)
         ns.corporation.hireEmployee(div, city, 'Research & Development');
 
 }

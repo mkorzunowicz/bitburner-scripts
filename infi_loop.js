@@ -105,17 +105,17 @@ export function autocomplete(data, args) {
     // would be nice if it added \"
     let vals = Object.values(cityCompanyDict).filter((value) => typeof value !== 'function');
     let companies = vals.flatMap(cityCompanies => cityCompanies.map(company => company.name));
-    let fs = addQuotesToNames(Object.values(factions).map(faction=> faction.name));
-    return [...companies, ...fs]; 
+    let fs = addQuotesToNames(Object.values(factions).map(faction => faction.name));
+    return [...companies, ...fs];
 }
 function addQuotesToNames(namesArray) {
-  return namesArray.map((name) => {
-    if (name.includes(' ')) {
-      return `"${name}"`;
-    } else {
-      return name;
-    }
-  });
+    return namesArray.map((name) => {
+        if (name.includes(' ')) {
+            return `"${name}"`;
+        } else {
+            return name;
+        }
+    });
 }
 function findCompanyToHackForFaction(company) {
     // TODO with singularity?
@@ -294,9 +294,19 @@ async function changeCity(ns, city) {
 async function startInfiltration(ns, companyToInfiltrate) {
     try {
         let city = cityCompanyDict.getKeyByName(companyToInfiltrate);
-        if (ns.getPlayer().city != city)
-            if (!(await changeCity(ns, city)))
-                return false;
+        let myCity = ns.getPlayer().city
+        if (myCity != city)
+            if (!(await changeCity(ns, city))) {
+                log(ns, `Oops, no money. Running in the city I'm in: ${myCity}`);
+
+                if (myCity == 'Volhaven') companyToInfiltrate = 'OmniTek Incorporated';
+                if (myCity == 'Aevum') companyToInfiltrate = 'ECorp';
+                if (myCity == 'Chongqing') companyToInfiltrate = 'KuaiGong International';
+                if (myCity == 'Sector-12') companyToInfiltrate = 'MegaCorp';
+                if (myCity == 'New Tokyo') companyToInfiltrate = 'VitaLife';
+                if (myCity == 'Ishima') companyToInfiltrate = 'Storm Technologies';
+                // return false;
+            }
 
         await clickByXpath(cityXpath);
         await clickByXpath(ariaXpath(companyToInfiltrate));

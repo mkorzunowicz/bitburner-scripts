@@ -1,6 +1,8 @@
 import { log, startScript } from 'common.js'
 
-/** @param {NS} ns */
+/** This code starts one infiltration if we don't have enough ram to run singl.js
+ * then checks if singularity is there and starts the code.
+ * @param {NS} ns */
 export async function main(ns) {
   if (startScript(ns, "infi.js")) log(ns, "Infiltration automated.");
   if (ns.getServerMaxRam('home') <= 32 && ns.getPlayer().money < 300000000) {

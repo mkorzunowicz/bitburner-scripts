@@ -49,7 +49,7 @@ function hasBladeburners(ns) {
 async function bladeburners(ns) {
     if (!hasBladeburners(ns)) return;
     debugger;
-
+    
     if (!ns.bladeburner.inBladeburner()) {
         await gym(ns, 100);
         if (ns.bladeburner.joinBladeburnerDivision())
@@ -105,12 +105,19 @@ async function createPrograms(ns) {
 /** @param {NS} ns */
 async function university(ns, level = 300) {
     if (ns.getPlayer().skills.hacking < level) {
-        ns.singularity.travelToCity('Volhaven');
-        if (ns.singularity.universityCourse('ZB Institute of Technology', 'Algorithms course', false))
-            log(ns, "Starting Alghoritms course");
-        else
-            log(ns, "Couldn't start learning Algorithms !!!", 'error');
 
+        if (ns.singularity.travelToCity('Volhaven')) {
+            if (ns.singularity.universityCourse('ZB Institute of Technology', 'Algorithms course', false))
+                log(ns, "Starting Alghoritms course in ZB");
+            else
+                log(ns, "Couldn't start learning Algorithms !!!", 'error');
+        }
+        else {
+            if (ns.singularity.universityCourse('Rothman University', 'Algorithms course', false)) 
+            log(ns, "Starting Alghoritms course in Rothman");
+            else
+                log(ns, "Couldn't start learning Algorithms !!!", 'error');
+        }
         while (ns.getPlayer().skills.hacking < level)
             await ns.sleep(1000);
     }

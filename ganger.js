@@ -46,12 +46,16 @@ export async function main(ns) {
         const shuffled = shuffleArray(workable);
         let member;
         while (member = shuffled.shift()) {
-          if (gangInfo.wantedLevelGainRate < 3)
+          await ns.sleep(200);
+          if (ns.gang.getGangInformation().wantedLevelGainRate < 0.3)
             ns.gang.setMemberTask(member.name, respTask);
           else
             ns.gang.setMemberTask(member.name, antiWantedTask);
 
         }
+
+        // await ns.sleep(10 * 1000);
+        await ns.sleep(1 * 500);
         // sleep till we can recruit next ganger
         while (shouldRun && !ns.gang.canRecruitMember()) {
           ascend(ns);
@@ -59,17 +63,17 @@ export async function main(ns) {
           await ns.sleep(3000);
         }
         // let's reduce the wanted level
-        for (let member of workable) {
-          ns.gang.setMemberTask(member.name, antiWantedTask);
-        }
+        // for (let member of workable) {
+        //   ns.gang.setMemberTask(member.name, antiWantedTask);
+        // }
         await recruit(ns);
         // sleep till wanted level drops to 1
-        while (shouldRun && ns.gang.getGangInformation().wantedLevel > 1) {
-          ascend(ns);
-          await ns.sleep(3000);
-        }
-        for (let member of workable)
-          ns.gang.setMemberTask(member.name, trainTask);
+        // while (shouldRun && ns.gang.getGangInformation().wantedLevel > 1) {
+        //   ascend(ns);
+        //   await ns.sleep(500);
+        // }
+        // for (let member of workable)
+        //   ns.gang.setMemberTask(member.name, trainTask);
       }
       else {
         // work for money
@@ -88,7 +92,8 @@ export async function main(ns) {
     buyAugs(ns);
 
     // shouldRun = false;
-    await ns.sleep(3000);
+    // await ns.sleep(3000);
+    await ns.sleep(1 * 500);
   }
 }
 /** @param {NS} ns */
@@ -147,84 +152,3 @@ function shuffleArray(array) {
   shuffledArray.sort(() => Math.random() - 0.5);
   return shuffledArray;
 }
-  // Unassigned
-  // Ransomware
-  // Phishing
-  // Identity Theft
-  // DDoS Attacks
-  // plant Vi rus
-  // Fraud & Counterfeiting
-  // Money Laundering
-  // Cyberterrorism
-  // Ethical Hacking
-  // Vigilante Justice
-  // Train Combat
-  // Train Hacking
-  // Train Charisma
-  // Territory warfare
-
-  // Ford Flex V20
-  // 33 . OOOm
-  // Mercedes-Benz s9001
-  // 318. ooom
-  // superbike ATX1070
-  // . OOOm
-  // white Ferrari
-  // 330. OOOrn
-
-  // Rootkit
-  // NUKE
-  // 35 . OOOrn
-  // Rootkit
-  // Demon
-  // 375 . OOOm
-  // Jack the Ripper
-  // 375 . OOOm
-  // soul stealer Rootkit
-  // 325 . OOOrn
-  // Hmap Node
-  // 340. 000m
-
-
-  // Bionic Arms
-  // 310. OOOb
-  // Bionic spine
-  // . OOOb
-  // Nanofi ber Weave
-  // 312 . OOOb
-  // synfibril Muscle
-  // . OOOb
-  // Neuralstimulator
-  // 310. OOOb
-  // Graphene Bone Laci ngs
-  // 350. OOOb
-  // Bionic Legs
-  // 310. OOOb
-  // BrachiB1ades
-  // 320. OOOb
-  // synthetic Heart
-  // 325. OOOb
-  // BitWire
-  // . OOOb
-  // DataJack
-  // 37 . 500b
-
-  // ns.gang.ascendMember(name)
-  // ns.gang.canRecruitMember(); //true
-  // ns.gang.inGang();
-  // ns.gang.recruitMember(name);
-  // ns.gang.getEquipmentNames(); //array
-
-  // ns.gang.getEquipmentCost(name);
-  // ns.gang.getTaskNames() //array
-
-  // ns.gang.getTaskStats(name);
-  // ns.gang.getMemberInformation(name);
-  // ns.gang.setMemberTask(memberName, taskName); //true
-
-  // ns.gang.getGangInformation()
-  // ns.gang.getGangInformation().isHacking
-  // ns.gang.getGangInformation().faction
-  // ns.gang.getGangInformation().wantedLevel
-  // ns.gang.getGangInformation().respect
-
