@@ -1,4 +1,4 @@
-import { log, timeTakenInSeconds, crackPorts, jumpTo, formatDuration, startScript, numberOfPortsOpenable, findNextBitNode, clickByXpath } from 'common.js'
+import { log, timeTakenInSeconds, crackPorts, jumpTo, formatDuration, startScript, numberOfPortsOpenable, findNextBitNode, clickByXpath, timeSinceBitNodeReset, LogState } from 'common.js'
 
 const wnd = eval("window");
 const doc = wnd["document"];
@@ -18,7 +18,7 @@ let shouldKillWorldDaemon = true;
  * Press ESC to stop running (both infi and singl will be stopped)!
  *  @param {NS} ns */
 export async function main(ns) {
-  
+
   // shouldKillWorldDaemon = ns.args[0] && ns.args[0].toLowerCase() === 'false';
   startScript(ns, "infi.js");
   // if (startScript(ns, "infi.js")) log(ns, "Infiltration automated.");
@@ -63,7 +63,7 @@ export async function main(ns) {
     await runIntro(ns, infi, runNumber);
   }
 
-  await upgradeHome(ns, infi, 3, 8192 * 2);
+  // await upgradeHome(ns, infi, 3, 8192 * 2); // this takes too long - 1,5h.. better to start when homi is reachable
   if (!shouldRun) { log(ns, 'Escape key pressed. Cancelling singl.js', 'error'); return; }
 
   await killW0r1dD43m0n(ns);
@@ -80,13 +80,21 @@ export async function main(ns) {
   }
 
   while (ns.singularity.upgradeHomeRam())
-    log(ns, 'upgraded ram on exit');
+    log(ns, `Upgraded ram to ${ns.getServer('home').maxRam} on aug install`, 'success', 5 * 1000, true);
 
   while (ns.singularity.upgradeHomeCores())
-    log(ns, 'upgraded cores on exit');
+    log(ns, `Upgraded cores to ${ns.getServer('home').cpuCores} on aug install`, 'success', 5 * 1000, true);
 
   singlRunNumber++;
-  log(ns, `AUGMENTS INSTALLED at ${new Date()}. Run took: ${formatDuration(timeTakenInSeconds(startDate, new Date()))}s. Since last AUG: ${formatDuration(ns.getTimeSinceLastAug() / 1000)}`, 'success', 60000);
+
+  let counter = 10;
+  log(ns, `Installing Augmentations in ${counter}s. Press ESC to cancel. `, 'warning', 1000 * 10);
+  while (counter-- > 0 && shouldRun) {
+    ns.toast(counter, 'warning', 1000);
+    await ns.sleep(1000);
+  }
+  log(ns, `AUGMENTS INSTALLED. Run took: ${formatDuration(ns.getTimeSinceLastAug() / 1000)}`, 'success', 60000, true);
+
   ns.singularity.installAugmentations('starter.js');
 }
 
@@ -121,12 +129,17 @@ async function runIntro(ns, infi, runNumber) {
   if (runNumber == 5) await runIntroInfi(ns, infi, 'New Tokyo', 'Storm Technologies');
   if (runNumber == 6) await runIntroInfi(ns, infi, 'Volhaven', 'OmniTek Incorporated');
 
-  ns.singularity.purchaseAugmentation('Shadows of Anarchy', 'SoA - phyzical WKS harmonizer');
+  // ns.singularity.purchaseAugmentation('Shadows of Anarchy', 'SoA - phyzical WKS harmonizer');
 
   if (runNumber == 0) {
-    log(ns, 'Upgrading Home Ram and Cores!', 'info', 60 * 1000);
-    Array.from({ length: 6 }, () => ns.singularity.upgradeHomeRam());
-    Array.from({ length: 6 }, () => ns.singularity.upgradeHomeCores());
+    Array.from({ length: 6 }, () => {
+      if (ns.singularity.upgradeHomeRam())
+        log(ns, `Upgraded ram to ${ns.getServer('home').maxRam} on intro`, 'success', 5 * 1000, true);
+    });
+    Array.from({ length: 6 }, () => {
+      if (ns.singularity.upgradeHomeCores())
+        log(ns, `Upgraded cores to ${ns.getServer('home').cpuCores} on intro`, 'success', 5 * 1000, true);
+    });
   }
 }
 
@@ -171,19 +184,16 @@ async function grindAugmentations(ns, infi, runNumber) {
   let pl = ns.getPlayer();
 
   let prioFactions = [];
-  if (runNumber < 2) {
-    prioFactions = ['Sector-12', 'Aevum'];
-  }
-  else if (runNumber < 7 && runNumber >= 2) {
-    prioFactions = ['Chongqing', 'Ishima', 'New Tokyo'];
-  }
-  else if (runNumber < 12 && runNumber >= 7) {
-    prioFactions = ['Volhaven'];
-  }
-  if (runNumber < 5 && runNumber >= 3)
-    prioFactions.push('The Black Hand', 'CyberSec', 'NiteSec');
+  if (runNumber == 1) prioFactions = ['Sector-12'];
+  if (runNumber == 2) prioFactions = ['Aevum'];
+  if (runNumber == 3) prioFactions = ['Chongqing'];
+  if (runNumber == 4) prioFactions = ['Ishima'];
+  if (runNumber == 5) prioFactions = ['New Tokyo'];
+  if (runNumber == 6) prioFactions = ['Volhaven'];
 
-  while (shouldRun && ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < AUGS_PER_RUN) {
+  // prioFactions.push('The Black Hand', 'CyberSec', 'NiteSec');
+
+  while (shouldRun && ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length < AUGS_PER_RUN || (shouldRun && ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'GRAFTING')) {
     let installed = ns.singularity.getOwnedAugmentations(true).filter((aug) => !ns.singularity.getOwnedAugmentations().includes(aug));
     if (installed.includes('QLink')) break;
     startScript(ns, "backdoor_loop.js");
@@ -236,8 +246,6 @@ async function grindAugmentations(ns, infi, runNumber) {
       buyAugmentation(ns, best);
     }
 
-
-
     await killW0r1dD43m0n(ns); // check and try to destroy the BitNode
     if (ns.getPlayer().skills.hacking > 3000)
       expandServers(ns);
@@ -268,8 +276,11 @@ function infiRunCount() {
 }
 /** @param {NS} ns */
 function buyAugmentation(ns, aug) {
-  if (ns.singularity.purchaseAugmentation(aug.faction, aug.aug))
-    log(ns, `Augmentation ${aug.aug} in ${aug.faction} bought for ${ns.nFormat(aug.price, "0.0a")}`, 'success', 30000);
+  if (ns.singularity.purchaseAugmentation(aug.faction, aug.aug)) {
+    // if (aug.aug == 'The Red Pill')
+    //   log(ns, `${aug.aug} bought`, 'success', 1 * 1000, true);
+    log(ns, `Augmentation ${aug.aug} in ${aug.faction} bought for ${ns.nFormat(aug.price, "0.0a")}`, 'success', 30 * 1000, true);
+  }
   else
     log(ns, `Couldn't buy augmentation: ${aug.aug} in ${aug.faction}`, 'warning');
 }
@@ -305,7 +316,9 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
       augDict[f][aug].facrep = factionrep[f];
     }
   }
-
+  // these will diminish Infiltration rewards, but are required to hit Covenant and Illuminati and are usually available from gang
+  // const combatAllRounders = ['Bionic Spine', 'HemoRecirculator', 'Graphene Bionic Spine Upgrade'];  // CordiARC Fusion Reactor is 35% combat skills and exp.. we install the STPN from Covenant which gives 75% as well.. which might be enough as well
+  const combatAllRounders = ['CordiARC Fusion Reactor', 'Bionic Spine', 'HemoRecirculator'];
   const highestInfi = Infiltration.bestInfiltration;
   const filteredEntries = [];
   for (const faction in augDict) {
@@ -322,7 +335,14 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
       const isHacking = hacking_chance > 1 || hacking_speed > 1 || hacking_money > 1 || hacking_grow > 1 || hacking > 1 || hacking_exp > 1;
       // const isCombat = strength > 1 || strength_exp > 1 || dexterity > 1 || dexterity_exp > 1 || agility > 1 || agility_exp > 1 || defense > 1 || defense_exp > 1;
       const isCombat = strength > 1 || dexterity > 1 || agility > 1 || defense > 1; // let's exclude non exp only
-      if (hackingOnly && isCombat && !isHacking && aug != 'NeuroFlux Governor') continue;
+
+      //if got less than 50 augs allow hacking only and NeuroFlux
+      if (owned.length < 50) {
+        if (hackingOnly && isCombat && !isHacking && aug != 'NeuroFlux Governor') continue;
+      }
+      // else allow hacking only and NeuroFlux or one of the combatAllRunders
+      else if (!combatAllRounders.includes(aug) && (hackingOnly && isCombat && !isHacking && aug != 'NeuroFlux Governor')) continue;
+
       if (!allowNeuroFlux && aug == 'NeuroFlux Governor') continue; // let's skip non combat because of infiltration, but charisma and special add to augmentation number
 
       // if (hackingOnly && !isHacking) // hacking exclusively
@@ -361,9 +381,10 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
     if (a.isNeuroFlux && !b.isNeuroFlux) return 1;
     else if (!a.isNeuroFlux && b.isNeuroFlux) return -1;
 
-    if (a.isPrio && !b.isPrio) return -1;
-    else if (!a.isPrio && b.isPrio) return 1;
-
+    if (!a.isNeuroFlux && !b.isNeuroFlux) {
+      if (a.isPrio && !b.isPrio) return -1;
+      else if (!a.isPrio && b.isPrio) return 1;
+    }
     if (a.isHacking && !b.isHacking) return -1;
     else if (!a.isHacking && b.isHacking) return 1;
 
@@ -398,7 +419,9 @@ async function killW0r1dD43m0n(ns) {
     let next = findNextBitNode(ns);
 
     // next = next + 1;
-    log(ns, `Killed BITNODE and starting next on ${next} `, 'warning', 1000 * 60 * 30);
+    log(ns, `-------------------------------------------------------------------------------`, 'warning', 1000 * 1, true);
+    log(ns, `Killed BITNODE ${ns.getResetInfo().currentNode} and starting next on ${next} ${timeSinceBitNodeReset(ns)}`, 'warning', 1000 * 60 * 30, true);
+    LogState.reset();
     ns.singularity.destroyW0r1dD43m0n(next, 'starter.js');
     // jumpTo(ns, target);
     // await ns.singularity.installBackdoor();
@@ -519,7 +542,7 @@ class Infiltration {
     //$14.235b ECorp on BitNode 6 wihtouht combat augments
     //$14.235b with 8 fluxes... hmmmm
     //$14.235b with The Black Hand and 76 Fluxes.. so fluxes don't influence this..
-    const incomePerSecond = this.ns.getScriptIncome('ultimate_spread.js', 'home', 'noexpand');
+    const incomePerSecond = this.ns.getTotalScriptIncome()[0];
     const secondsOfPassive = Math.ceil(aug.price / incomePerSecond);
     // if (secondsToGrind < 60)
     if (this.ns.getPlayer().skills.hacking > 6000) { // TODO change this
@@ -568,7 +591,7 @@ class Infiltration {
       const facFavor = this.ns.singularity.getFactionFavor(aug.faction);
       if (facFavor >= this.ns.getFavorToDonate()) {
 
-        const incomePerSecond = this.ns.getScriptIncome('ultimate_spread.js', 'home', 'noexpand');
+        const incomePerSecond = this.ns.getTotalScriptIncome()[0];
         const best = Infiltration.bestInfiltration;
         let repGain = await this.repPer100k(aug.faction);
         let repPerRun = best.reward.tradeRep;

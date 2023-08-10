@@ -1,27 +1,91 @@
-import { log, startScript } from 'common.js'
+import { log, startScript, LogState, timeSinceBitNodeReset, formatDuration } from 'common.js'
 
 /** @param {NS} ns */
 export async function main(ns) {
+    const speakersCombatLevel = 300;
+    const covenantCombatLevel = 850;
+    const illuminatiCombatLevel = 1200;
     ns.disableLog('ALL');
-    // let factionToGrind = ns.args[0];
 
-    // await keepAlive(ns);
+    await waitForGraft(ns);
 
-    await university(ns);
+    await study(ns, 50);
+    // await createProg(ns, 'AutoLink');
+    // await createProg(ns, 'DeepscanV1');
+    // await createProg(ns, 'ServerProfiler');
 
-    // TODO: with most of the augmentations up to Daedalus i am missing small values of Agility just before being invited to The Covenant - needs 850 all skills, Illuminati needs 1200
-    // TODO: some smart way to select when to grind it
-    // await gym(ns, 1200);
-    // so the problem is - the more Combat skills i have, the lower Infiltration rewards
+    await study(ns, 300);
     await gym(ns);
+    if (LogState.homicideFirstTime) {
+        log(ns, `Starting homicide for the first time. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
+        LogState.homicideFirstTime = false;
+    }
+
     await commitHomicide(ns);
     await waitToStartGang(ns);
 
     // this makes sense only after BN5 and the grind is slow
     await createPrograms(ns);
-    // await bladeburners(ns);
+    // await graft(ns, 'Wired Reflexes');
+    await graft(ns, ['OmniTek InfoLoad', 'Neuronal Densification']);
 
-    await commitHomicide(ns);
+    // await bladeburners(ns);
+    //TODO: calculate the exp and hacking multipliers if in range for WorldDaemonDifficulty.. if yes, skip the gym
+    await gym(ns, speakersCombatLevel);
+    await gym(ns, covenantCombatLevel);
+    // await gym(ns, illuminatiCombatLevel);
+
+    await study(ns, ns.getBitNodeMultipliers().WorldDaemonDifficulty * 3000);
+}
+
+/** @param {NS} ns */
+async function waitForGraft(ns) {
+    let runningGraft = false;
+    let augName = "";
+    while (ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'GRAFTING') {
+        if (!runningGraft) {
+            augName = ns.singularity.getCurrentWork().augmentation;
+            runningGraft = true;
+        }
+        await ns.sleep(2000);
+    }
+    if (runningGraft)
+        log(ns, `Grafting ${augName} for finished. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
+}
+/** Runs one of the available grafts per run
+ *  @param {NS} ns */
+async function graft(ns, augNames) {
+    let augName;
+    let augAvailable = false;
+    while (!augAvailable && augNames.length > 0) {
+        augName = augNames.shift();
+        if (augName && ns.grafting.getGraftableAugmentations().includes(augName))
+            augAvailable = true;
+        await ns.sleep(100);
+    }
+    if (!augAvailable) return;
+    // this is from a company, so a perfect choice
+    // OmniTek InfoLoad
+    // Time to Graft: 48 minutes 57 seconds
+    // // $8b
+    // Effects:
+    // +20.00% hacking skill
+    // +25.00% hacking exp
+    while (ns.grafting.getAugmentationGraftPrice(augName) > ns.getPlayer().money)
+        await ns.sleep(2000);
+
+    const time = ns.grafting.getAugmentationGraftTime(augName);
+    // const augAvailable = ns.grafting.getGraftableAugmentations().includes(augName);
+    const cost = ns.grafting.getAugmentationGraftPrice(augName);
+    if (augAvailable && cost < ns.getPlayer().money && ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type != 'GRAFTING') {
+        if (ns.singularity.travelToCity('New Tokyo'))
+            if (ns.grafting.graftAugmentation(augName, false))
+                log(ns, `Grafting ${augName} for ${ns.nFormat(cost, "0.0a")} started. Should take ${formatDuration(time / 1000)}`, 'warning', 60 * 1000, true);
+
+        while (ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'GRAFTING')
+            await ns.sleep(2000);
+        log(ns, `Grafting ${augName} for ${ns.nFormat(cost, "0.0a")} finished`, 'success', 30 * 1000, true);
+    }
 }
 
 /** @param {NS} ns */
@@ -49,7 +113,7 @@ function hasBladeburners(ns) {
 async function bladeburners(ns) {
     if (!hasBladeburners(ns)) return;
     debugger;
-    
+
     if (!ns.bladeburner.inBladeburner()) {
         await gym(ns, 100);
         if (ns.bladeburner.joinBladeburnerDivision())
@@ -73,37 +137,31 @@ async function bladeburners(ns) {
     // }
     // debugger;
 }
+
 /** @param {NS} ns */
-async function createPrograms(ns) {
+async function createProg(ns, progName) {
     // for BN5 we could grind some Intelligence by making the programs by hand..
+    let prog = progName + '.exe';
+    if (!ns.fileExists(prog, 'home'))
+        if (ns.singularity.createProgram(prog, false)) {
+            log(ns, `Creating ${prog}`);
 
-    // these 2 i never buy and they need less than 300 int to create
-    if (!ns.fileExists('ServerProfiler.exe', 'home'))
-        // if (!ns.fileExists('ServerProfiler.exe', 'home') && ns.singularity.getCurrentWork().type != 'CREATE_PROGRAM' && ns.singularity.getCurrentWork().programName != 'ServerProfiler.exe')
-        if (ns.singularity.createProgram('ServerProfiler.exe', false)) {
-            log(ns, "Creating ServerProfiler.exe");
             while (ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'CREATE_PROGRAM')
                 await ns.sleep(2000);
 
-            log(ns, "Creation of ServerProfiler.exe finished.");
+            log(ns, `Creation of ${prog} finished.`);
         }
         else
-            log(ns, "Failed starting ServerProfiler.exe creation", 'error');
-
-    if (!ns.fileExists('DeepscanV2.exe', 'home'))
-        if (ns.singularity.createProgram('DeepscanV2.exe', false)) {
-            log(ns, "Creating DeepscanV2.exe");
-            while (ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'CREATE_PROGRAM')
-                await ns.sleep(2000);
-
-            log(ns, "Creation of DeepscanV2.exe finished.");
-        }
-        else
-            log(ns, "Failed starting DeepscanV2.exe creation", 'error');
-
+            log(ns, `Failed starting ${prog} creation`, 'error');
 }
 /** @param {NS} ns */
-async function university(ns, level = 300) {
+async function createPrograms(ns) {
+    // these 2 i never buy and they need less than 300 int to create
+    await createProg(ns, 'ServerProfiler');
+    await createProg(ns, 'DeepscanV2');
+}
+/** @param {NS} ns */
+async function study(ns, level = 300) {
     if (ns.getPlayer().skills.hacking < level) {
 
         if (ns.singularity.travelToCity('Volhaven')) {
@@ -113,8 +171,8 @@ async function university(ns, level = 300) {
                 log(ns, "Couldn't start learning Algorithms !!!", 'error');
         }
         else {
-            if (ns.singularity.universityCourse('Rothman University', 'Algorithms course', false)) 
-            log(ns, "Starting Alghoritms course in Rothman");
+            if (ns.singularity.universityCourse('Rothman University', 'Algorithms course', false))
+                log(ns, "Starting Alghoritms course in Rothman");
             else
                 log(ns, "Couldn't start learning Algorithms !!!", 'error');
         }
@@ -190,7 +248,7 @@ async function waitToStartGang(ns) {
             if (ns.singularity.checkFactionInvitations().includes(gangToJoin))
                 ns.singularity.joinFaction(gangToJoin)
         if (ns.gang.createGang(gangToJoin))
-            log(ns, 'Starting gang at ' + gangToJoin, 'success');
+            log(ns, `Starting gang at ${gangToJoin}. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
         else
             log(ns, "Couldn't start a gang at " + gangToJoin, 'error');
     }

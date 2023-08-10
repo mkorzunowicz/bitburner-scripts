@@ -6,7 +6,7 @@ const doc = wnd["document"];
  * @param {string} type info (default) | warning | success | error
  * @param {number} time in ms
  */
-export function log(ns, msg, type = 'info', time = 15 * 1000) {
+export function log(ns, msg, type = 'info', time = 15 * 1000, perma = false) {
   console.log(msg);
   ns.toast(msg, type, time);
   if (type == 'info' || type == 'success') {
@@ -17,7 +17,90 @@ export function log(ns, msg, type = 'info', time = 15 * 1000) {
     ns.print(type.toUpperCase() + ": " + msg);
     ns.tprint(type.toUpperCase() + ": " + msg);
   }
+  if (perma) {
+    // used to save big event's like bitnode destroyed, sleeves done with shock, gang started, aug installed
+    // don't spam - it's not meant for it
+    const when = formatDateToISO(new Date());
+    let l = localStorage.getItem('log');
+    if (!l) l = "";
+    l += `${when} - ${msg}\n`;
+    localStorage.setItem('log', l);
+  }
 }
+
+/** This needs to be reset every AUG installation!! */
+export class LogState {
+  static getBooleanPropertyFromLocalStorage(key) {
+    const storedValue = localStorage.getItem(key);
+    return storedValue ? storedValue === 'true' : true;
+  }
+
+  static reset() {
+    LogState.shockTresholdFirstTime = true;
+    LogState.shockZeroFirstTime = true;
+    LogState.homicideFirstTime = true;
+    LogState.sleeveHomicideFirstTime = true;
+  }
+  static setBooleanPropertyWithSave(key, value) {
+    localStorage.setItem(key, String(value));
+  }
+
+  static loadProperties() {
+    LogState.shockTresholdFirstTime = LogState.getBooleanPropertyFromLocalStorage('shockTresholdFirstTime');
+    LogState.shockZeroFirstTime = LogState.getBooleanPropertyFromLocalStorage('shockZeroFirstTime');
+    LogState.homicideFirstTime = LogState.getBooleanPropertyFromLocalStorage('homicideFirstTime');
+    LogState.sleeveHomicideFirstTime = LogState.getBooleanPropertyFromLocalStorage('sleeveHomicideFirstTime');
+  }
+
+  // Getter and Setter for shockTresholdFirstTime
+  static get shockTresholdFirstTime() {
+    return LogState.getBooleanPropertyFromLocalStorage('shockTresholdFirstTime');
+  }
+
+  static set shockTresholdFirstTime(value) {
+    LogState.setBooleanPropertyWithSave('shockTresholdFirstTime', value);
+  }
+
+  // Getter and Setter for shockZeroFirstTime
+  static get shockZeroFirstTime() {
+    return LogState.getBooleanPropertyFromLocalStorage('shockZeroFirstTime');
+  }
+
+  static set shockZeroFirstTime(value) {
+    LogState.setBooleanPropertyWithSave('shockZeroFirstTime', value);
+  }
+
+  // Getter and Setter for homicideFirstTime
+  static get homicideFirstTime() {
+    return LogState.getBooleanPropertyFromLocalStorage('homicideFirstTime');
+  }
+
+  static set homicideFirstTime(value) {
+    LogState.setBooleanPropertyWithSave('homicideFirstTime', value);
+  }
+  // Getter and Setter for homicideFirstTime
+  static get sleeveHomicideFirstTime() {
+    return LogState.getBooleanPropertyFromLocalStorage('sleeveHomicideFirstTime');
+  }
+
+  static set sleeveHomicideFirstTime(value) {
+    LogState.setBooleanPropertyWithSave('sleeveHomicideFirstTime', value);
+  }
+}
+// Load saved data from localStorage immediately when the module is imported
+LogState.loadProperties();
+
+export function formatDateToISO(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+}
+
 
 /** Time taken in seconds between two dates
  * @param {Date} startDate start
@@ -37,15 +120,21 @@ export function timeTakenInSeconds(startDate, endDate) {
 export function formatDuration(seconds) {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
+  const remainingSeconds = Math.ceil(seconds % 60);
 
   const formattedHours = hours < 10 ? `0${hours}` : hours;
   const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
   const formattedSeconds = remainingSeconds < 10 ? `0${remainingSeconds}` : remainingSeconds;
 
-  return `${formattedHours}:${formattedMinutes}:${Math.ceil(formattedSeconds)}`;
+  return `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
 }
 
+/** Returns string date from the moment BitNode got reset
+ * @param {NS} ns
+ */
+export function timeSinceBitNodeReset(ns) {
+  return formatDuration(timeTakenInSeconds(new Date(ns.getResetInfo().lastNodeReset), new Date()));
+}
 
 /** Starts a script and returns true/false depending on the result
  * @param {NS} ns
@@ -56,26 +145,36 @@ export function startScript(ns, scriptName, kill = false, param = null) {
   if (param) {
     if (!ns.isRunning(scriptName, 'home', param)) {
       if (ns.exec(scriptName, 'home', 1, param) != 0)
-        return true;
+        return 3;
     } else {
-      ns.kill(scriptName, 'home', param);
-      if (ns.exec(scriptName, 'home', 1, param) != 0)
-        return true;
-      else return false;
+      if (kill) {
+        ns.kill(scriptName, 'home');
+        if (ns.exec(scriptName, 'home', 1, param) != 0)
+          return 4;
+        else {
+          log(ns, `Couldn't start ${scriptName}!!!`, 'error');
+          return 0;
+        }
+      } else { return 5; }
     }
   }
   else if (!ns.isRunning(scriptName, 'home')) {
     if (ns.exec(scriptName, 'home', 1) != 0)
-      return true;
+      return 1;
 
     log(ns, `Couldn't start ${scriptName}!!!`, 'error');
-    return false;
+    return 0;
   }
   else {
-    ns.kill(scriptName, 'home');
-    if (ns.exec(scriptName, 'home', 1) != 0)
-      return true;
-    else return false;
+    if (kill) {
+      ns.kill(scriptName, 'home');
+      if (ns.exec(scriptName, 'home', 1) != 0)
+        return 2;
+      else {
+        log(ns, `Couldn't start ${scriptName}!!!`, 'error');
+        return 0;
+      }
+    } else { return 5; }
   }
 }
 
@@ -182,6 +281,15 @@ export function jumpTo(ns, target) {
 export function findNextBitNode(ns) {
   // can't find the current bitnode :/
   let sourceFiles = ns.singularity.getOwnedSourceFiles();
+  let current = ns.getResetInfo().currentNode;
+
+  let curNode = sourceFiles.filter(node => node.n == current)[0];
+  if (curNode) {
+
+    let ind = sourceFiles.indexOf(curNode);
+    if (sourceFiles[ind].lvl == 2) sourceFiles[ind].lvl = 3;
+  }
+  else return current;
   // Check if all sourceFiles are at level 3
   const allAtLevel3 = sourceFiles.every(file => file.lvl === 3);
 

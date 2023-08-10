@@ -25,8 +25,9 @@ export async function main(ns) {
   function run_script(ns, allServers) {
     let threadsLeft = allServers.totalRunnableScriptThreads();
   
-    const hackable2 = allServers.sortByHackingLevelDesc();
-    const hackable = allServers.sortByMoneyFlowRate();
+    const hackable = allServers.sortByHackingLevel();
+    // const hackable = allServers.sortByHackingLevelDesc();
+    // const hackable = allServers.sortByMoneyFlowRate();
     const totalThreadsRequired = allServers.totalThreadsRequired();
     while (threadsLeft > 0) {
       const serverToHack = hackable.shift();
@@ -150,7 +151,7 @@ export async function main(ns) {
       this.ns = ns;
       this.runningScripts = {};
       let visited = [];
-      this.numberOfPortsOpenable = 0;
+      ServerAnalysis.portsOpenable = this.numberOfPortsOpenable = 0;
       // we need to reset the static stuff after augmentation
       ServerAnalysis.hackTools = {
         brutessh: false,
@@ -302,17 +303,17 @@ export async function main(ns) {
         (this.hackability.portsRequired <= openablePorts &&
           this.maxRam > 0);
   
+      // if (!this.hackability.hasAdminRights) // TODO: make sure what opening ports does: allows execution or hacking? confirmed: allows execution
+      this.crackPorts(openablePorts);
+  
       this.hackability.availableRam = this.maxRam - this.usedRam;
       if (target == 'home')
-        this.hackability.availableRam -= 2000;     // For Corpo we need 1TB
+        this.hackability.availableRam -= ramNeededForExternalScripts(this.ns);     // For Corpo we need 1TB
       this.hackability.runnableScriptThreads = Math.floor(this.hackability.availableRam / this.weakenScriptRam);
   
       this.hackable = this.moneyMax != 0 && this.hackability.portsRequired <= openablePorts && this.hackability.requiredHackingLevel <= this.ns.getHackingLevel();
   
       if (!this.hackable) return;
-  
-      if (!this.hackability.hasAdminRights) // TODO: make sure what opening ports does: allows execution or hacking?
-        this.crackPorts(this.ns, this.name);
   
       // const cores = this.cpuCores;
       // const cores = 8;
@@ -396,7 +397,7 @@ export async function main(ns) {
     /** Installs hacks if enough is availabale 
      * @param {number} numberOfPortsOpenable */
     crackPorts(numberOfPortsOpenable) {
-      if (this.hackability.portsRequired < numberOfPortsOpenable) return;
+      if (this.hackability.portsRequired > numberOfPortsOpenable) return;
       if (ServerAnalysis.hackTools.brutessh)
         this.ns.brutessh(this.name);
       if (ServerAnalysis.hackTools.ftpcrack)
@@ -454,7 +455,15 @@ export async function main(ns) {
       return count;
     }
   }
-  
+  ServerAnalysis.portsOpenable = 0;
+  // we need to reset the static stuff after each run just to be sure. Maybe static isn't a good idea after all
+  ServerAnalysis.hackTools = {
+    brutessh: false,
+    ftpcrack: false,
+    relaysmtp: false,
+    httpworm: false,
+    sqlinject: false,
+  };
   /** Calculates how many threads are required to decrease the security by this many levels
    * @param {NS} ns 
    * @param {number} securityLevelsToDecrease
@@ -470,5 +479,24 @@ export async function main(ns) {
       threads++;
     }
     return threads;
+  }
+  let ramNeeded = 0;
+  /** @param {NS} ns */
+  function ramNeededForExternalScripts(ns) {
+    if (ramNeeded != 0) return ramNeeded;
+  
+    ramNeeded += ns.getScriptRam('singl.js');
+    ramNeeded += ns.getScriptRam('homigrind_loop.js');
+    ramNeeded += ns.getScriptRam('sleeve.js');
+    ramNeeded += ns.getScriptRam('infi_loop.js');
+    ramNeeded += ns.getScriptRam('stats.js');
+    ramNeeded += ns.getScriptRam('ganger.js');
+    ramNeeded += ns.getScriptRam('backdoor_loop.js');
+    ramNeeded += ns.getScriptRam('expand_servers.js');
+    ramNeeded += ns.getScriptRam('upgrade_servers.js');
+    ramNeeded += ns.getScriptRam('jumpbd.js');
+    // ramNeeded += ns.getScriptRam('corpo.js');
+  
+    return ramNeeded;
   }
   

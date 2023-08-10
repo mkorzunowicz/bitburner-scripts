@@ -1,12 +1,11 @@
-import { numberOfPortsOpenable } from 'common.js'
-const wnd = eval("window");
-const doc = wnd["document"];
+import { numberOfPortsOpenable, formatDuration, timeTakenInSeconds } from 'common'
+
 /**
  * @param {NS} ns
  **/
 export async function main(ns) {
   ns.disableLog('ALL');
-  // const doc = eval('document')
+  const doc = eval('document')
   const hook0 = doc.getElementById('overview-extra-hook-0')
   const hook1 = doc.getElementById('overview-extra-hook-1')
   if (!hook0 || !hook1) {
@@ -23,12 +22,29 @@ export async function main(ns) {
     hook0.innerText = "w0r1d_d43m0n";
     hook1.innerText = `${ns.getBitNodeMultipliers().WorldDaemonDifficulty * 3000}`;
 
-    hook0.innerText += "\nIncome\nExper.\nKarma"
-    hook1.innerText +=
-      `\n${ns.nFormat(ns.getScriptIncome('ultimate_spread.js', 'home', 'noexpand'), "$0.0a")}/s` +
-      // `${ns.nFormat(ns.getScriptIncome()[0], "$0.0a")}/s` +
-      `\n${ns.nFormat(ns.getScriptExpGain('ultimate_spread.js', 'home', 'noexpand'), "0.0a")}/s` +
-      `\n${ns.nFormat(ns.heart.break(), "0.0a")}`
+    const resetInfo = ns.getResetInfo();
+    hook0.innerText += `\nBN${resetInfo.currentNode} time`;
+
+    hook1.innerText += `\n${formatDuration(timeTakenInSeconds(new Date(resetInfo.lastNodeReset), new Date()))}`;
+
+    hook0.innerText += "\nAug inst";
+    hook1.innerText += `\n${formatDuration(ns.getTimeSinceLastAug() / 1000)}`;
+
+    hook0.innerText += "\nAugs";
+    hook1.innerText += `\n${ns.singularity.getOwnedAugmentations().length} (${ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length})`;
+
+    // hook0.innerText += "\nIncome"
+    // hook1.innerText += `\n${ns.nFormat(ns.getScriptIncome('ultimate_spread.js', 'home', 'noexpand'), "$0.0a")}/s`;
+
+    hook0.innerText += "\nIncome"
+    hook1.innerText += `\n${ns.nFormat(ns.getTotalScriptIncome()[0], "$0.0a")}/s`;
+
+    hook0.innerText += "\nExp"
+    // hook1.innerText += `\n${ns.nFormat(ns.getScriptExpGain('ultimate_spread.js', 'home', 'noexpand'), "0.0a")}/s`;
+    hook1.innerText += `\n${ns.nFormat(ns.getTotalScriptExpGain(), "0.0a")}/s`;
+
+    hook0.innerText += "\nKarma"
+    hook1.innerText += `\n${ns.nFormat(ns.heart.break(), "0.0a")}`;
 
     hook0.innerText += "\nPpl killed";
     hook1.innerText += `\n${ns.getPlayer().numPeopleKilled}`;
@@ -38,9 +54,6 @@ export async function main(ns) {
       hook1.innerText += "\nYES";
     else
       hook1.innerText += "\nNO";
-
-    hook0.innerText += "\nAugs";
-    hook1.innerText += `\n${ns.singularity.getOwnedAugmentations().length} (${ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length})`;
 
     if (!hasTor) {
       hook0.innerText += "\nTor";
