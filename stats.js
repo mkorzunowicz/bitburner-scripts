@@ -20,7 +20,7 @@ export async function main(ns) {
     let hasTor = ns.hasTorRouter();
 
     hook0.innerText = "w0r1d_d43m0n";
-    hook1.innerText = `${ns.getBitNodeMultipliers().WorldDaemonDifficulty * 3000}`;
+    hook1.innerText = `${Math.ceil(ns.getBitNodeMultipliers().WorldDaemonDifficulty * 3000)}`;
 
     const resetInfo = ns.getResetInfo();
     hook0.innerText += `\nBN${resetInfo.currentNode} time`;

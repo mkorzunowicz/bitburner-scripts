@@ -13,6 +13,9 @@ const travelXpath = "//*[contains(text(), 'Travel')]";
 const sellForXpath = "//*[contains(text(), 'Sell for')]";
 const cancelXpath = "//*[contains(text(), 'Cancel Infiltration')]";
 const finishedXpath = "//*[contains(text(), 'Infiltration successful!')]";
+const closeWorkXpath = "//*[contains(text(), 'Do something else simultaneously')]";
+
+
 const runningXpath = "//*[contains(text(), 'Level ')]";
 const openingInfiScreenXpath = "//*[contains(text(), 'Infiltrating ')]";
 
@@ -136,7 +139,6 @@ export async function main(ns) {
     }
     if (!companyToInfiltrate) companyToInfiltrate = 'ECorp';
     if (!timesToRun) timesToRun = 9999999;
-
     // console.clear();
 
     ns.tprint('Starting infiltration loop. Press Escape to stop.');
@@ -161,12 +163,13 @@ export async function main(ns) {
         log(ns, msg);
     });
     let startDate;
-    let playerFactions = ns.getPlayer().factions; // TODO instead of iterating through all, we could use the joined ones
+    // let playerFactions = ns.getPlayer().factions; // TODO instead of iterating through all, we could use the joined ones
     while (shouldRun && timesToRun > successful) {
         try {
             let seeLevel = finByXpath(runningXpath);
             let seeEnterScreen = finByXpath(textContainsXpath("Infiltrating ")); // is infi.js running?
             let seeSellFor = finByXpath(sellForXpath);
+            let seeWork = finByXpath(closeWorkXpath);
 
             if (seeSellFor) {
                 successful++;
@@ -232,16 +235,16 @@ export async function main(ns) {
                 msg += ` Took: ${timeTakenInSeconds(startDate, new Date())}s. Successful: ${successful} / ${count}`;
                 log(ns, msg.trimStart(), 'success');
                 await ns.sleep(200);
-            }
-            else if (seeEnterScreen) {
+            } else if (seeEnterScreen) {
                 await clickByXpath(textContainsXpath("Start"));
-                // console.log("running..");
+                await ns.sleep(500);
+            } else if (seeWork) {
+                await clickByXpath(closeWorkXpath);
                 await ns.sleep(500);
             } else if (seeLevel) {
                 // console.log("running..");
                 await ns.sleep(500);
-            }
-            else {
+            } else {
                 startDate = new Date();
                 count++;
                 log(ns, 'Running infiltration ' + count + '/' + timesToRun, 'info', 75 * 1000);

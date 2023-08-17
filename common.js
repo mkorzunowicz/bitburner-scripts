@@ -23,8 +23,7 @@ export function log(ns, msg, type = 'info', time = 15 * 1000, perma = false) {
     const when = formatDateToISO(new Date());
     let l = localStorage.getItem('log');
     if (!l) l = "";
-    l += `${when} - ${msg}\n`;
-    localStorage.setItem('log', l);
+    localStorage.setItem('log', `${when} - ${msg}\n` + l);
   }
 }
 
@@ -282,7 +281,7 @@ export function findNextBitNode(ns) {
   // can't find the current bitnode :/
   let sourceFiles = ns.singularity.getOwnedSourceFiles();
   let current = ns.getResetInfo().currentNode;
-
+  if (current == 12) return 12;
   let curNode = sourceFiles.filter(node => node.n == current)[0];
   if (curNode) {
 
@@ -347,5 +346,16 @@ export async function clickElementTrusted(elem) {
   catch {
 
     await elem[Object.keys(elem)[1]].onMouseDown({ isTrusted: true });
+  }
+}
+
+/** @param {NS} ns */
+export function hasSingularity(ns) {
+  try {
+    ns.singularity.connect('home');
+    return true;
+  }
+  catch {
+    return false;
   }
 }

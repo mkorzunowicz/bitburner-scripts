@@ -7,29 +7,39 @@ export async function main(ns) {
     const illuminatiCombatLevel = 1200;
     ns.disableLog('ALL');
 
+    if (!isGrafting(ns)) {
+
+        await study(ns, 50);
+        await createProg(ns, 'AutoLink');
+        await createProg(ns, 'DeepscanV1');
+        await createProg(ns, 'ServerProfiler');
+
+        //TODO: need to make checkpoints for Tetrads in 
+        await gym(ns, 75);
+        await commitHomicide(ns);
+        await waitForKarma(ns, -18); // Tetrads
+
+        await graft(ns, [
+            'OmniTek InfoLoad',
+            // 'Unstable Circadian Modulator',
+            'PC Direct-Neural Interface',
+            'PC Direct-Neural Interface NeuroNet Injector',
+            'PC Direct-Neural Interface Optimization Submodule']);
+    }
     await waitForGraft(ns);
 
-    await study(ns, 50);
-    // await createProg(ns, 'AutoLink');
-    // await createProg(ns, 'DeepscanV1');
-    // await createProg(ns, 'ServerProfiler');
+    await createProg(ns, 'DeepscanV2');
 
     await study(ns, 300);
-    await gym(ns);
+
+
     if (LogState.homicideFirstTime) {
         log(ns, `Starting homicide for the first time. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
         LogState.homicideFirstTime = false;
     }
-
     await commitHomicide(ns);
-    await waitToStartGang(ns);
+    await waitForKarma(ns);
 
-    // this makes sense only after BN5 and the grind is slow
-    await createPrograms(ns);
-    // await graft(ns, 'Wired Reflexes');
-    await graft(ns, ['OmniTek InfoLoad', 'Neuronal Densification']);
-
-    // await bladeburners(ns);
     //TODO: calculate the exp and hacking multipliers if in range for WorldDaemonDifficulty.. if yes, skip the gym
     await gym(ns, speakersCombatLevel);
     await gym(ns, covenantCombatLevel);
@@ -37,7 +47,9 @@ export async function main(ns) {
 
     await study(ns, ns.getBitNodeMultipliers().WorldDaemonDifficulty * 3000);
 }
-
+function isGrafting(ns) {
+    return ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'GRAFTING';
+}
 /** @param {NS} ns */
 async function waitForGraft(ns) {
     let runningGraft = false;
@@ -50,7 +62,8 @@ async function waitForGraft(ns) {
         await ns.sleep(2000);
     }
     if (runningGraft)
-        log(ns, `Grafting ${augName} for finished. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
+        log(ns, `Grafting ${augName} finished. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
+    // TODO: if cancelled - log accordingly
 }
 /** Runs one of the available grafts per run
  *  @param {NS} ns */
@@ -64,6 +77,55 @@ async function graft(ns, augNames) {
         await ns.sleep(100);
     }
     if (!augAvailable) return;
+
+    while (ns.grafting.getAugmentationGraftPrice(augName) > ns.getPlayer().money)
+        await ns.sleep(2000);
+
+    const time = ns.grafting.getAugmentationGraftTime(augName);
+    const cost = ns.grafting.getAugmentationGraftPrice(augName);
+    if (augAvailable && cost < ns.getPlayer().money &&
+        ns.singularity.getCurrentWork() &&
+        ns.singularity.getCurrentWork().type != 'GRAFTING') {
+        if (ns.singularity.travelToCity('New Tokyo'))
+            if (ns.grafting.graftAugmentation(augName, false))
+                log(ns, `Grafting ${augName} for ${ns.nFormat(cost, "0.0a")} started. Should take ${formatDuration(time / 1000)}`, 'warning', 60 * 1000, true);
+
+        // while (ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'GRAFTING')
+        //     await ns.sleep(2000);
+        // log(ns, `Grafting ${augName} for ${ns.nFormat(cost, "0.0a")} finished`, 'success', 30 * 1000, true);
+    }
+
+// Neuronal Densification (Clarke Incorporated)
+// Money Cost: $1.375b
+// Reputation: 187.500k
+// Hacking Skill +15%
+// Hacking Exp +10%
+// Hack/Grow/Weaken Speed +3%
+
+// nextSENS Gene Modification (Clarke Incorporated)
+// Money Cost: $1.925b
+// Reputation: 437.500k
+// All Skills +20%
+
+// Xanipher (NWO)
+// Money Cost: $4.250b
+// Reputation: 875.000k
+// All Skills +20%
+// All Exp +15%
+
+// ECorp HVMind Implant (ECorp)
+// Money Cost: $5.500b
+// Reputation: 1.500m
+// Grow Power +200%
+
+    // Unstable Circadian Modulator
+    // $15b
+    // Time to Graft: 58 minutes 15 seconds
+    // An experimental nanobot injection. Its unstable nature leads to unpredictable results based on your circadian rhythm.
+    // Effects:
+    // +15.00% hacking skill
+    // +100.00% hacking exp
+
     // this is from a company, so a perfect choice
     // OmniTek InfoLoad
     // Time to Graft: 48 minutes 57 seconds
@@ -71,33 +133,151 @@ async function graft(ns, augNames) {
     // Effects:
     // +20.00% hacking skill
     // +25.00% hacking exp
-    while (ns.grafting.getAugmentationGraftPrice(augName) > ns.getPlayer().money)
-        await ns.sleep(2000);
 
-    const time = ns.grafting.getAugmentationGraftTime(augName);
-    // const augAvailable = ns.grafting.getGraftableAugmentations().includes(augName);
-    const cost = ns.grafting.getAugmentationGraftPrice(augName);
-    if (augAvailable && cost < ns.getPlayer().money && ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type != 'GRAFTING') {
-        if (ns.singularity.travelToCity('New Tokyo'))
-            if (ns.grafting.graftAugmentation(augName, false))
-                log(ns, `Grafting ${augName} for ${ns.nFormat(cost, "0.0a")} started. Should take ${formatDuration(time / 1000)}`, 'warning', 60 * 1000, true);
 
-        while (ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'GRAFTING')
-            await ns.sleep(2000);
-        log(ns, `Grafting ${augName} for ${ns.nFormat(cost, "0.0a")} finished`, 'success', 30 * 1000, true);
+    // Neuronal Densification
+    // $8 gb
+    // Time to Graft: 1 hour 23 seconds
+    // The brain is surgically re-engineered to have increased neuronal density by decreasing the neuron gap junction. Then, the body is genetically modified to enhance the production and capabilities of its neural stem cells.
+    // Effects:
+    // +15.00% hacking skill
+    // +10.00% hacking exp
+    // +3.00% faster hack(), grow(), and weaken()
+
+
+    // nextSENS Gene Modification
+    // $5b
+    // Time to Graft: 1 hour 31 minutes 20 seconds
+    // The body is genetically re-engineered to maintain a state of negligible senescence, preventing the body from deteriorating with age.
+    // Effects:
+    // +20.00% all skills
+
+    // PC Direct-Neural Interface
+    // $11b
+    // Time to Graft: 47 minutes 19 seconds
+    // Installs a Direct-Neural Interface jack into your arm that is compatible with most computers. Connecting to a computer through this jack allows you to interface with it using the brain's electrochemical signals.
+    // Effects:
+    // +8.00% hacking skill
+    // +30.00% reputation from companies
+
+    // PC Direct-Neural Interface NeuroNet Injector
+    // $22b
+    // Time to Graft: 1 hour 9 minutes 0 seconds
+    // Pre-Requisites:
+    // PC Direct-Neural Interface
+    // This is an additional installation that upgrades the functionality of the PC Direct-Neural Interface augmentation. When connected to a computer, the Neural Network upgrade allows the user to use their own brain's processing power to aid the computer in computational tasks.
+    // Effects:
+    // +10.00% hacking skill
+    // +5.00% faster hack(), grow(), and weaken()
+    // +100.00% reputation from companies
+
+    // PC Direct-Neural Interface Optimization Submodule
+    // $13b
+    // Time to Graft: 54 minutes 21 seconds
+    // Pre-Requisites:
+    // PC Direct-Neural Interface
+    // This is a submodule upgrade to the PC Direct-Neural Interface augmentation. It improves the performance of the interface and gives the user more control options to a connected computer.
+    // Effects:
+    // +10.00% hacking skill
+    // +75.00% reputation from companies
+
+}
+
+/** @param {NS} ns */
+async function createProg(ns, progName) {
+    // for BN5 we could grind some Intelligence by making the programs by hand..
+    let prog = progName + '.exe';
+    if (!ns.fileExists(prog, 'home'))
+        if (ns.singularity.createProgram(prog, false)) {
+            log(ns, `Creating ${prog}`);
+
+            while (ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'CREATE_PROGRAM')
+                await ns.sleep(2000);
+
+            log(ns, `Creation of ${prog} finished.`);
+        }
+        else
+            log(ns, `Failed starting ${prog} creation`, 'error');
+}
+
+/** @param {NS} ns */
+async function study(ns, level = 300) {
+    if (ns.getPlayer().skills.hacking < level) {
+
+        if (ns.singularity.travelToCity('Volhaven')) {
+            if (ns.singularity.universityCourse('ZB Institute of Technology', 'Algorithms course', false))
+                log(ns, "Starting Alghoritms course in ZB");
+            else
+                log(ns, "Couldn't start learning Algorithms !!!", 'error');
+        }
+        else {
+            if (ns.singularity.universityCourse('Rothman University', 'Algorithms course', false))
+                log(ns, "Starting Alghoritms course in Rothman");
+            else
+                log(ns, "Couldn't start learning Algorithms !!!", 'error');
+        }
+        while (ns.getPlayer().skills.hacking < level)
+            await ns.sleep(1000);
     }
 }
 
 /** @param {NS} ns */
-async function keepAlive(ns) {
-    while (true) {
-        while (ns.getPlayer().hp.current >= ns.getPlayer().hp.max)
-            await ns.sleep(1000);
-
-        ns.singularity.hospitalize();
+async function gym(ns, level = 75) {
+    // while (ns.getPlayer().skills.hacking < 300)
+    //     await ns.sleep(2000);
+    ns.singularity.travelToCity('Sector-12');
+    ns.singularity.gymWorkout('Powerhouse Gym', 'strength', false)
+    while (ns.getPlayer().skills.strength < level)
         await ns.sleep(1000);
+
+    ns.singularity.travelToCity('Sector-12');
+    ns.singularity.gymWorkout('Powerhouse Gym', 'defense', false)
+    while (ns.getPlayer().skills.defense < level)
+        await ns.sleep(1000);
+
+    ns.singularity.travelToCity('Sector-12');
+    ns.singularity.gymWorkout('Powerhouse Gym', 'dexterity', false)
+    while (ns.getPlayer().skills.dexterity < level)
+        await ns.sleep(1000);
+
+    ns.singularity.travelToCity('Sector-12');
+    ns.singularity.gymWorkout('Powerhouse Gym', 'agility', false)
+    while (ns.getPlayer().skills.agility < level)
+        await ns.sleep(1000);
+
+}
+
+/** @param {NS} ns */
+async function commitHomicide(ns) {
+    // grind karma with homicide
+    ns.singularity.commitCrime('Homicide', false);
+}
+
+
+/** @param {NS} ns */
+async function waitForKarma(ns, karma = -54000) {
+    // required karma to start a gang is -54000
+    while (ns.heart.break() > karma)
+        await ns.sleep(2000);
+
+    if (karma <= -54000) {
+        // starting a gang needs grinding Karma to -54k, which takes up to 15 hours.. maybe in higher BNs it makes sense
+        const gangToJoin = 'NiteSec';
+        if (!ns.gang.inGang()) {
+            if (!ns.getPlayer().factions.includes(gangToJoin))
+                if (ns.singularity.checkFactionInvitations().includes(gangToJoin))
+                    ns.singularity.joinFaction(gangToJoin)
+            if (ns.gang.createGang(gangToJoin))
+                log(ns, `Starting gang at ${gangToJoin}. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
+            else
+                log(ns, "Couldn't start a gang at " + gangToJoin, 'error');
+        }
+        if (startScript(ns, 'ganger.js', true))
+            log(ns, 'Starting ganger.js ' + 'success');
     }
 }
+
+
 /** @param {NS} ns */
 function hasBladeburners(ns) {
     try {
@@ -138,73 +318,16 @@ async function bladeburners(ns) {
     // debugger;
 }
 
-/** @param {NS} ns */
-async function createProg(ns, progName) {
-    // for BN5 we could grind some Intelligence by making the programs by hand..
-    let prog = progName + '.exe';
-    if (!ns.fileExists(prog, 'home'))
-        if (ns.singularity.createProgram(prog, false)) {
-            log(ns, `Creating ${prog}`);
 
-            while (ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'CREATE_PROGRAM')
-                await ns.sleep(2000);
-
-            log(ns, `Creation of ${prog} finished.`);
-        }
-        else
-            log(ns, `Failed starting ${prog} creation`, 'error');
-}
 /** @param {NS} ns */
-async function createPrograms(ns) {
-    // these 2 i never buy and they need less than 300 int to create
-    await createProg(ns, 'ServerProfiler');
-    await createProg(ns, 'DeepscanV2');
-}
-/** @param {NS} ns */
-async function study(ns, level = 300) {
-    if (ns.getPlayer().skills.hacking < level) {
-
-        if (ns.singularity.travelToCity('Volhaven')) {
-            if (ns.singularity.universityCourse('ZB Institute of Technology', 'Algorithms course', false))
-                log(ns, "Starting Alghoritms course in ZB");
-            else
-                log(ns, "Couldn't start learning Algorithms !!!", 'error');
-        }
-        else {
-            if (ns.singularity.universityCourse('Rothman University', 'Algorithms course', false))
-                log(ns, "Starting Alghoritms course in Rothman");
-            else
-                log(ns, "Couldn't start learning Algorithms !!!", 'error');
-        }
-        while (ns.getPlayer().skills.hacking < level)
+async function keepAlive(ns) {
+    while (true) {
+        while (ns.getPlayer().hp.current >= ns.getPlayer().hp.max)
             await ns.sleep(1000);
+
+        ns.singularity.hospitalize();
+        await ns.sleep(1000);
     }
-}
-
-/** @param {NS} ns */
-async function gym(ns, level = 80) {
-    // while (ns.getPlayer().skills.hacking < 300)
-    //     await ns.sleep(2000);
-    ns.singularity.travelToCity('Sector-12');
-    ns.singularity.gymWorkout('Powerhouse Gym', 'strength', false)
-    while (ns.getPlayer().skills.strength < level)
-        await ns.sleep(1000);
-
-    ns.singularity.travelToCity('Sector-12');
-    ns.singularity.gymWorkout('Powerhouse Gym', 'defense', false)
-    while (ns.getPlayer().skills.defense < level)
-        await ns.sleep(1000);
-
-    ns.singularity.travelToCity('Sector-12');
-    ns.singularity.gymWorkout('Powerhouse Gym', 'dexterity', false)
-    while (ns.getPlayer().skills.dexterity < level)
-        await ns.sleep(1000);
-
-    ns.singularity.travelToCity('Sector-12');
-    ns.singularity.gymWorkout('Powerhouse Gym', 'agility', false)
-    while (ns.getPlayer().skills.agility < level)
-        await ns.sleep(1000);
-
 }
 /** @param {NS} ns */
 async function securityWork(ns) {
@@ -227,37 +350,6 @@ async function securityWork(ns) {
         await ns.sleep(2000);
     }
 }
-
-/** @param {NS} ns */
-async function commitHomicide(ns) {
-    // grind karma with homicide
-    ns.singularity.commitCrime('Homicide', false);
-}
-
-
-/** @param {NS} ns */
-async function waitToStartGang(ns) {
-    // required karma to start a gang is -54000
-    while (ns.heart.break() > -54000)
-        await ns.sleep(2000);
-
-    // starting a gang needs grinding Karma to -54k, which takes up to 15 hours.. maybe in higher BNs it makes sense
-    const gangToJoin = 'NiteSec';
-    if (!ns.gang.inGang()) {
-        if (!ns.getPlayer().factions.includes(gangToJoin))
-            if (ns.singularity.checkFactionInvitations().includes(gangToJoin))
-                ns.singularity.joinFaction(gangToJoin)
-        if (ns.gang.createGang(gangToJoin))
-            log(ns, `Starting gang at ${gangToJoin}. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
-        else
-            log(ns, "Couldn't start a gang at " + gangToJoin, 'error');
-    }
-    if (startScript(ns, 'ganger.js', true))
-        log(ns, 'Starting ganger.js ' + 'success');
-}
-
-
-
 
 
 

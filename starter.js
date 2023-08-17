@@ -1,18 +1,18 @@
-import { log, startScript } from 'common.js'
+import { log, startScript, hasSingularity } from 'common.js'
 
 /** This code starts one infiltration if we don't have enough ram to run singl.js
  * then checks if singularity is there and starts the code.
  * @param {NS} ns */
 export async function main(ns) {
   if (startScript(ns, "infi.js")) log(ns, "Infiltration automated.");
-  if (ns.getServerMaxRam('home') <= 32 && ns.getPlayer().money < 300000000) {
+  if (ns.getServerMaxRam('home') <= 256 && ns.getPlayer().money < 300000000) {
     await infiltrate(ns, 'MegaCorp', 1, 'none');
   }
 
   startScript(ns, "stats.js")
 
   if (hasSingularity(ns)) {
-    if (ns.getServerMaxRam('home') <= 32)
+    if (ns.getServerMaxRam('home') <= 256)
       Array.from({ length: 3 }, () => ns.singularity.upgradeHomeRam());
     if (startScript(ns, "singl.js")) log(ns, "Starting singularity automation...");
   }
@@ -32,16 +32,5 @@ async function infiltrate(ns, target, times, faction) {
 
   while (ns.isRunning(infiPid)) {
     await ns.sleep(2000);
-  }
-}
-
-/** @param {NS} ns */
-function hasSingularity(ns) {
-  try {
-    ns.singularity.connect('home');
-    return true;
-  }
-  catch {
-    return false;
   }
 }
