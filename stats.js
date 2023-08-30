@@ -1,4 +1,4 @@
-import { numberOfPortsOpenable, formatDuration, timeTakenInSeconds } from 'common'
+import { numberOfPortsOpenable, formatDuration, timeTakenInSeconds, totalRam } from 'common'
 
 /**
  * @param {NS} ns
@@ -72,6 +72,13 @@ export async function main(ns) {
 
     hook0.innerText += "\nInfi runs";
     hook1.innerText += `\n${localStorage.getItem('infiRunCounter')}`;
+
+    hook0.innerText += "\nHome ram";
+    hook1.innerText += `\n${ns.formatRam(ns.getServerMaxRam('home'))}`;
+
+    hook0.innerText += "\nTotal ram";
+    hook1.innerText += `\n${ns.formatRam(totalRam(ns))}`;
+    
 
     await ns.sleep(1000);
   }

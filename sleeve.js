@@ -11,7 +11,8 @@ export async function main(ns) {
   // NOTE: I need the sleeves for Homicide and then Combat skills grind.. not sure it's necessary
   // after about 5 hours with 75 we can train to 30 with homicide rate of 16%, with 8 sleeves that
   // should double the normal homicide grind speed
-  const shockTreshold = 75;
+  // const shockTreshold = 75;
+  const shockTreshold = 95;
   let sleevesDictionary = Object.fromEntries(Array.from({ length: ns.sleeve.getNumSleeves() }, (_, index) => [index, ns.sleeve.getSleeve(index)]));
   let shouldRun = true;
   // let ags = ns.sleeve.getSleevePurchasableAugs('2');

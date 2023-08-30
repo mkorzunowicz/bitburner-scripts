@@ -1,4 +1,4 @@
-import { log, startScript, LogState, timeSinceBitNodeReset, formatDuration } from 'common.js'
+import { log, startScript, LogState, timeSinceBitNodeReset, formatDuration, expandServers, stopExpandingServers } from 'common.js'
 
 /** @param {NS} ns */
 export async function main(ns) {
@@ -7,6 +7,7 @@ export async function main(ns) {
     const illuminatiCombatLevel = 1200;
     ns.disableLog('ALL');
 
+    // await gym(ns, 100);
     if (!isGrafting(ns)) {
 
         await study(ns, 50);
@@ -21,10 +22,16 @@ export async function main(ns) {
 
         await graft(ns, [
             'OmniTek InfoLoad',
-            // 'Unstable Circadian Modulator',
             'PC Direct-Neural Interface',
             'PC Direct-Neural Interface NeuroNet Injector',
-            'PC Direct-Neural Interface Optimization Submodule']);
+            'PC Direct-Neural Interface Optimization Submodule',
+            'Neuronal Densification',
+            'Xanipher',
+            'nextSENS Gene Modification',
+            'Neurotrainer III',
+            'ECorp HVMind Implant',
+            'QLink'
+        ]);
     }
     await waitForGraft(ns);
 
@@ -61,13 +68,17 @@ async function waitForGraft(ns) {
         }
         await ns.sleep(2000);
     }
-    if (runningGraft)
+    if (runningGraft) {
+        LogState.graftingFinished = true;
         log(ns, `Grafting ${augName} finished. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
+    }
     // TODO: if cancelled - log accordingly
 }
 /** Runs one of the available grafts per run
  *  @param {NS} ns */
 async function graft(ns, augNames) {
+    if (LogState.graftingFinished) return;
+
     let augName;
     let augAvailable = false;
     while (!augAvailable && augNames.length > 0) {
@@ -78,8 +89,14 @@ async function graft(ns, augNames) {
     }
     if (!augAvailable) return;
 
-    while (ns.grafting.getAugmentationGraftPrice(augName) > ns.getPlayer().money)
+    while (ns.grafting.getAugmentationGraftPrice(augName) > ns.getPlayer().money) {
+        if (augName == 'QLink') {
+            const incomePerSecond = ns.getTotalScriptIncome()[0];
+            if (incomePerSecond > 8000000000) stopExpandingServers(ns);
+        }
+        await createProg(ns, 'DeepscanV2');
         await ns.sleep(2000);
+    }
 
     const time = ns.grafting.getAugmentationGraftTime(augName);
     const cost = ns.grafting.getAugmentationGraftPrice(augName);
@@ -94,37 +111,33 @@ async function graft(ns, augNames) {
         //     await ns.sleep(2000);
         // log(ns, `Grafting ${augName} for ${ns.nFormat(cost, "0.0a")} finished`, 'success', 30 * 1000, true);
     }
+    //Neurotrainer III
+    // All Exp +20%
 
-// Neuronal Densification (Clarke Incorporated)
-// Money Cost: $1.375b
-// Reputation: 187.500k
-// Hacking Skill +15%
-// Hacking Exp +10%
-// Hack/Grow/Weaken Speed +3%
 
-// nextSENS Gene Modification (Clarke Incorporated)
-// Money Cost: $1.925b
-// Reputation: 437.500k
-// All Skills +20%
+    // Neuronal Densification (Clarke Incorporated)
+    // Money Cost: $1.375b
+    // Reputation: 187.500k
+    // Hacking Skill +15%
+    // Hacking Exp +10%
+    // Hack/Grow/Weaken Speed +3%
 
-// Xanipher (NWO)
-// Money Cost: $4.250b
-// Reputation: 875.000k
-// All Skills +20%
-// All Exp +15%
+    // nextSENS Gene Modification (Clarke Incorporated)
+    // Money Cost: $1.925b
+    // Reputation: 437.500k
+    // All Skills +20%
 
-// ECorp HVMind Implant (ECorp)
-// Money Cost: $5.500b
-// Reputation: 1.500m
-// Grow Power +200%
+    // Xanipher (NWO)
+    // Money Cost: $4.250b
+    // Reputation: 875.000k
+    // All Skills +20%
+    // All Exp +15%
 
-    // Unstable Circadian Modulator
-    // $15b
-    // Time to Graft: 58 minutes 15 seconds
-    // An experimental nanobot injection. Its unstable nature leads to unpredictable results based on your circadian rhythm.
-    // Effects:
-    // +15.00% hacking skill
-    // +100.00% hacking exp
+    // ECorp HVMind Implant (ECorp)
+    // Money Cost: $5.500b
+    // Reputation: 1.500m
+    // Grow Power +200%
+
 
     // this is from a company, so a perfect choice
     // OmniTek InfoLoad

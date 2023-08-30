@@ -40,6 +40,11 @@ export class LogState {
     LogState.homicideFirstTime = true;
     LogState.sleeveHomicideFirstTime = true;
   }
+
+  static resetAugInstall() {
+    LogState.graftingFinished = false;
+  }
+
   static setBooleanPropertyWithSave(key, value) {
     localStorage.setItem(key, String(value));
   }
@@ -58,6 +63,15 @@ export class LogState {
 
   static set shockTresholdFirstTime(value) {
     LogState.setBooleanPropertyWithSave('shockTresholdFirstTime', value);
+  }
+
+  // Getter and Setter for graftingFinished
+  static get graftingFinished() {
+    return LogState.getBooleanPropertyFromLocalStorage('graftingFinished');
+  }
+
+  static set graftingFinished(value) {
+    LogState.setBooleanPropertyWithSave('graftingFinished', value);
   }
 
   // Getter and Setter for shockZeroFirstTime
@@ -257,12 +271,12 @@ export async function crackPorts(ns, target) {
  * @param {string} serv Server to search through
  * @param {Array<string>} visited Already visited servers array which gets populated as output
 */
-export async function recursive_scan(ns, serv, visited) {
+export function recursive_scan(ns, serv, visited) {
   visited.push(serv);
 
   for (const serv2 of ns.scan(serv)) {
     if (!visited.includes(serv2)) {
-      await recursive_scan(ns, serv2, visited);
+      recursive_scan(ns, serv2, visited);
     }
   }
 }
@@ -350,6 +364,17 @@ export async function clickElementTrusted(elem) {
 }
 
 /** @param {NS} ns */
+export function hashacknetServers(ns) {
+  try {
+    ns.hacknet.getHashUpgrades();
+    return true;
+  }
+  catch {
+    return false;
+  }
+}
+
+/** @param {NS} ns */
 export function hasSingularity(ns) {
   try {
     ns.singularity.connect('home');
@@ -358,4 +383,30 @@ export function hasSingularity(ns) {
   catch {
     return false;
   }
+}
+
+/** @param {NS} ns */
+export function expandServers(ns) {
+  if (!ns.isRunning("upgrade_servers.js", 'home'))
+    if (startScript(ns, "upgrade_servers.js", false)) ns.tprint("Started server upgrade loop");
+}
+
+/** @param {NS} ns */
+export function stopExpandingServers(ns) {
+  if (ns.isRunning("upgrade_servers.js", 'home')) {
+    ns.kill("upgrade_servers.js");
+    log(ns, 'Stopping server upgrades', 'warning');
+  }
+}
+
+/** @param {NS} ns */
+export function totalRam(ns) {
+  let visited = [];
+  let total = 0;
+  recursive_scan(ns, 'home', visited);
+  for (const serv of visited) {
+    if (serv == 'home' || serv.includes('pserv') || serv.includes('hacknet'))
+      total += ns.getServerMaxRam(serv);
+  }
+  return total;
 }

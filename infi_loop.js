@@ -160,7 +160,9 @@ export async function main(ns) {
         doc.removeEventListener('keydown', handleEscapeKey);
 
         let msg = `Looped Infiltration ended. Successful: ${successful} / ${count}`;
-        log(ns, msg);
+
+        ns.tprint(msg);
+        // log(ns, msg);
     });
     let startDate;
     // let playerFactions = ns.getPlayer().factions; // TODO instead of iterating through all, we could use the joined ones
@@ -230,6 +232,7 @@ export async function main(ns) {
                 else {
                     const tradeForAmount = finByXpath(sellForXpath).querySelector('span').textContent;
                     msg += " Selling work for " + tradeForAmount;
+
                     await clickByXpath(sellForXpath);
                 }
                 msg += ` Took: ${timeTakenInSeconds(startDate, new Date())}s. Successful: ${successful} / ${count}`;
@@ -247,7 +250,9 @@ export async function main(ns) {
             } else {
                 startDate = new Date();
                 count++;
-                log(ns, 'Running infiltration ' + count + '/' + timesToRun, 'info', 75 * 1000);
+                if (timesToRun > 1)
+                    log(ns, 'Running infiltration ' + count + '/' + timesToRun, 'info', 75 * 1000);
+                // ns.tprint('Running infiltration ' + count + '/' + timesToRun);
                 // console.log('Started infiltration ' + count);
                 // ns.tprint('Started infiltration ' + count);
                 await startInfiltration(ns, companyToInfiltrate);
