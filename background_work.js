@@ -1,7 +1,62 @@
 import { log, startScript, LogState, timeSinceBitNodeReset, formatDuration, expandServers, stopExpandingServers } from 'common.js'
+import { getConfiguration } from 'helpers.js'
 
-/** @param {NS} ns */
+const argsSchema = [
+    ['hackGraftLoop', false], //Just loop the hacking grafting
+    ['dontGang', false], // BN2 challenge
+
+];
+
+export function autocomplete(data, args) {
+    data.flags(argsSchema);
+    return [];
+}
+let runOptions;
+
+/**  @param {NS} ns */
 export async function main(ns) {
+    runOptions = getConfiguration(ns, argsSchema);
+    if (!runOptions) return; // Invalid options, or ran in --help mode.
+
+    if (runOptions.hackGraftLoop) {
+        await hackGraftLoop(ns);
+    }
+    if (ns.getResetInfo().currentNode == 8) {
+        // for BN8 challenge we want to avoid the need to install augmentation, therefore use the power of grafting
+
+        // await allGraftLoop(ns);
+        await waitForGraft(ns);
+        await study(ns, 50);
+        await createProg(ns, 'AutoLink');
+        await createProg(ns, 'DeepscanV1');
+        await createProg(ns, 'ServerProfiler');
+        await createProg(ns, 'relaySMTP');
+        await createProg(ns, 'FTPCrack');
+        await createProg(ns, 'BruteSSH');
+        await createProg(ns, 'HTTPWorm');
+        await createProg(ns, 'SQLInject');
+        await commitHomicide(ns);
+        await waitForKarma(ns);
+
+        // while (ns.getPlayer().money < 30_000_000_000)
+        while (ns.getPlayer().money < 5_000_000_000)
+            await ns.sleep(10000);
+        // await graft(ns, [
+        //     'OmniTek InfoLoad',
+        //     'Neuronal Densification',
+        //     'Xanipher',
+        //     'nextSENS Gene Modification',
+        //     'PC Direct-Neural Interface',
+        //     'PC Direct-Neural Interface NeuroNet Injector',
+        //     'PC Direct-Neural Interface Optimization Submodule',
+        //     'Neurotrainer III',
+        //     'ECorp HVMind Implant',
+        //     'QLink',
+        //     'nickofolas Congruity Implant'
+        // ]);
+        await allGraftLoop(ns);
+        // await hackGraftLoop(ns);
+    }
     const speakersCombatLevel = 300;
     const covenantCombatLevel = 850;
     const illuminatiCombatLevel = 1200;
@@ -14,6 +69,11 @@ export async function main(ns) {
         await createProg(ns, 'AutoLink');
         await createProg(ns, 'DeepscanV1');
         await createProg(ns, 'ServerProfiler');
+        await createProg(ns, 'relaySMTP');
+        await createProg(ns, 'FTPCrack');
+        await createProg(ns, 'BruteSSH');
+        await createProg(ns, 'HTTPWorm');
+        await createProg(ns, 'SQLInject');
 
         //TODO: need to make checkpoints for Tetrads in 
         await gym(ns, 75);
@@ -22,15 +82,23 @@ export async function main(ns) {
 
         await graft(ns, [
             'OmniTek InfoLoad',
-            'PC Direct-Neural Interface',
-            'PC Direct-Neural Interface NeuroNet Injector',
-            'PC Direct-Neural Interface Optimization Submodule',
             'Neuronal Densification',
             'Xanipher',
             'nextSENS Gene Modification',
+            'PC Direct-Neural Interface',
+            'PC Direct-Neural Interface NeuroNet Injector',
+            'PC Direct-Neural Interface Optimization Submodule',
             'Neurotrainer III',
-            'ECorp HVMind Implant',
-            'QLink'
+            'Artificial Bio-neural Network Implant', //12%
+            'Unstable Circadian Modulator', //15% skill, 100% exp
+            'Neural Accelerator',
+            'SPTN-97 Gene Modification', //15%
+            'BitRunners Neurolink',
+            'The Black Hand',
+
+            // 'ECorp HVMind Implant',
+            'QLink',
+            'nickofolas Congruity Implant'
         ]);
     }
     await waitForGraft(ns);
@@ -45,15 +113,83 @@ export async function main(ns) {
         LogState.homicideFirstTime = false;
     }
     await commitHomicide(ns);
-    await waitForKarma(ns);
+    if (!runOptions.dontGang)
+        await waitForKarma(ns);
 
     //TODO: calculate the exp and hacking multipliers if in range for WorldDaemonDifficulty.. if yes, skip the gym
     await gym(ns, speakersCombatLevel);
     await gym(ns, covenantCombatLevel);
     // await gym(ns, illuminatiCombatLevel);
-
     await study(ns, ns.getBitNodeMultipliers().WorldDaemonDifficulty * 3000);
+    await hackingWork(ns);
 }
+
+/** @param {NS} ns */
+function graftNamesToObjects(ns, names) {
+    return ns.grafting.getGraftableAugmentations().map(augName => {
+        return {
+            time: ns.grafting.getAugmentationGraftTime(augName),
+            cost: ns.grafting.getAugmentationGraftPrice(augName),
+            name: augName,
+            // multis: ns.singularity.getAugmentationStats(augName)
+        }
+    });
+}
+
+/** @param {NS} ns */
+async function allGraftLoop(ns) {
+
+    let grafts = ns.grafting.getGraftableAugmentations().map(augName => {
+        return {
+            time: ns.grafting.getAugmentationGraftTime(augName),
+            price: ns.grafting.getAugmentationGraftPrice(augName),
+            multis: ns.singularity.getAugmentationStats(augName),
+            prereq: ns.singularity.getAugmentationPrereq(augName),
+            name: augName,
+            // multis: ns.singularity.getAugmentationStats(augName)
+        }
+    });
+    grafts.filter(g=>g.prereq.includes())
+    let timeSorted = grafts.sort((a, b) => a.time - b.time);
+    let priceSorted = grafts.sort((a, b) => a.price - b.price);
+    let hackingSorted = grafts.sort((a, b) => b.multis.hacking - a.multis.hacking);
+    let owned = ns.singularity.getOwnedAugmentations(true);
+    let affordable = hackingSorted.filter(g=>g.price < ns.getPlayer().money);
+    let filteredWithPreReq = affordable.filter(g=>g.prereq.every(pr=> owned.includes(pr)));
+    let names = filteredWithPreReq.map(g => g.name);
+    let sthToGraft = true;
+    // return;
+    while (sthToGraft) {
+        await waitForGraft(ns);
+
+        sthToGraft = await graft(ns, names, true);
+    }
+}
+/** @param {NS} ns */
+async function hackGraftLoop(ns) {
+    let sthToGraft = true;
+    while (sthToGraft) {
+        await waitForGraft(ns);
+
+        sthToGraft = await graft(ns, [
+            'OmniTek InfoLoad',
+            'Neuronal Densification',
+            'Xanipher',
+            'nextSENS Gene Modification',
+            'PC Direct-Neural Interface',
+            'PC Direct-Neural Interface NeuroNet Injector',
+            'PC Direct-Neural Interface Optimization Submodule',
+            // 'Neurotrainer III',
+            'BitRunners Neurolink',
+            'SPTN-97 Gene Modification',
+            'The Black Hand',
+            'CRTX42-AA Gene Modification',
+            'Artificial Bio-neural Network Implant',
+            'QLink'
+        ], true);
+    }
+}
+
 function isGrafting(ns) {
     return ns.singularity.getCurrentWork() && ns.singularity.getCurrentWork().type == 'GRAFTING';
 }
@@ -76,8 +212,9 @@ async function waitForGraft(ns) {
 }
 /** Runs one of the available grafts per run
  *  @param {NS} ns */
-async function graft(ns, augNames) {
-    if (LogState.graftingFinished) return;
+async function graft(ns, augNames, overrideFinished = false) {
+    if (!overrideFinished)
+        if (LogState.graftingFinished) return;
 
     let augName;
     let augAvailable = false;
@@ -87,7 +224,7 @@ async function graft(ns, augNames) {
             augAvailable = true;
         await ns.sleep(100);
     }
-    if (!augAvailable) return;
+    if (!augAvailable) return false;
 
     while (ns.grafting.getAugmentationGraftPrice(augName) > ns.getPlayer().money) {
         if (augName == 'QLink') {
@@ -101,8 +238,7 @@ async function graft(ns, augNames) {
     const time = ns.grafting.getAugmentationGraftTime(augName);
     const cost = ns.grafting.getAugmentationGraftPrice(augName);
     if (augAvailable && cost < ns.getPlayer().money &&
-        ns.singularity.getCurrentWork() &&
-        ns.singularity.getCurrentWork().type != 'GRAFTING') {
+        (ns.singularity.getCurrentWork() == null || ns.singularity.getCurrentWork().type != 'GRAFTING')) {
         if (ns.singularity.travelToCity('New Tokyo'))
             if (ns.grafting.graftAugmentation(augName, false))
                 log(ns, `Grafting ${augName} for ${ns.nFormat(cost, "0.0a")} started. Should take ${formatDuration(time / 1000)}`, 'warning', 60 * 1000, true);
@@ -111,6 +247,7 @@ async function graft(ns, augNames) {
         //     await ns.sleep(2000);
         // log(ns, `Grafting ${augName} for ${ns.nFormat(cost, "0.0a")} finished`, 'success', 30 * 1000, true);
     }
+    return true;
     //Neurotrainer III
     // All Exp +20%
 
@@ -275,7 +412,8 @@ async function waitForKarma(ns, karma = -54000) {
 
     if (karma <= -54000) {
         // starting a gang needs grinding Karma to -54k, which takes up to 15 hours.. maybe in higher BNs it makes sense
-        const gangToJoin = 'NiteSec';
+        // const gangToJoin = 'NiteSec'; // hacking
+        const gangToJoin = 'Speakers for the Dead'; // combat
         if (!ns.gang.inGang()) {
             if (!ns.getPlayer().factions.includes(gangToJoin))
                 if (ns.singularity.checkFactionInvitations().includes(gangToJoin))
@@ -362,6 +500,20 @@ async function securityWork(ns) {
     while (ns.singularity.getCrimeChance('Homicide') < 0.9) {
         await ns.sleep(2000);
     }
+}
+
+
+/** @param {NS} ns */
+async function hackingWork(ns) {
+    let factions = ns.getPlayer().factions;
+    while (!factions.includes('Daedalus')) {
+        factions = ns.getPlayer().factions;
+        await ns.sleep(2000);
+    }
+
+    log(ns, 'Starting hacking work');
+    if (factions.includes('Daedalus'))
+        ns.singularity.workForFaction('Daedalus', 'hacking', false);
 }
 
 

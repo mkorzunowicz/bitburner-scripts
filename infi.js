@@ -32,7 +32,7 @@ let auto = false
 let repFaction = ''
 
 // Speed of game actions, in milliseconds.
-const speed = 20;
+const speed = 15;
 
 // Time infiltration(s)
 let infiltrationStart = 0

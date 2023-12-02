@@ -1,7 +1,24 @@
 import { log, LogState, timeSinceBitNodeReset } from 'common.js'
+import { getConfiguration } from 'helpers.js'
 
+const argsSchema = [
+  ['buyAllAugs', false], // buy all available augmentations
+
+];
+export function autocomplete(data, args) {
+  data.flags(argsSchema);
+  return [];
+}
+let runOptions;
 /** @param {NS} ns */
 export async function main(ns) {
+  runOptions = getConfiguration(ns, argsSchema);
+
+  let sleevesDictionary = Object.fromEntries(Array.from({ length: ns.sleeve.getNumSleeves() }, (_, index) => [index, ns.sleeve.getSleeve(index)]));
+  if (runOptions.buyAllAugs) {
+    buyAllAugs(ns, sleevesDictionary);
+    return;
+  }
   // it should take 18 hours 30 minutes for the Sleeves to recover
   const homicideCombatLevel = 35;
   const speakersCombatLevel = 300;
@@ -12,8 +29,7 @@ export async function main(ns) {
   // after about 5 hours with 75 we can train to 30 with homicide rate of 16%, with 8 sleeves that
   // should double the normal homicide grind speed
   // const shockTreshold = 75;
-  const shockTreshold = 95;
-  let sleevesDictionary = Object.fromEntries(Array.from({ length: ns.sleeve.getNumSleeves() }, (_, index) => [index, ns.sleeve.getSleeve(index)]));
+  const shockTreshold = 85;
   let shouldRun = true;
   // let ags = ns.sleeve.getSleevePurchasableAugs('2');
 
@@ -32,12 +48,14 @@ export async function main(ns) {
           log(ns, `Sleeve shock zeroed. Buying augs. Since reset: ${timeSinceBitNodeReset(ns)}`, 'success', 30 * 1000, true);
           LogState.shockZeroFirstTime = false;
         }
-        buyAugs(ns, s, sl);
+        // buyAugs(ns, s, sl);
 
         if (ns.heart.break() < -54000) {
           // gang in - grind combat for covenant and illuminati on player
           let me = ns.getPlayer();
-          if (me.numPeopleKilled < 30)
+          if (ns.getResetInfo().currentNode == 8)
+            homi(ns, s);
+          else if (me.numPeopleKilled < 30)
             homi(ns, s);
           else if (!combatLevelReached(me, speakersCombatLevel))
             workout(ns, s, sl, speakersCombatLevel, me);
@@ -73,6 +91,7 @@ function buyAugs(ns, s, sl) {
   if (sl.shock != 0) return;
   // NOTE: if we start homicide before sleeves are on 0 shock and it manages to reach -54k karma before sleeves are zeroed, it makes no sense to spend the money
   // they are all targeting combat skills to increase homicide rate, by the time sleeve are brought to 0 Shock, we should be making plenty of money
+
   // ns.sleeve.purchaseSleeveAug(s, 'Neurotrainer I'); //$4.000m
   // ns.sleeve.purchaseSleeveAug(s, 'Neurotrainer II'); //$45.000m
   // ns.sleeve.purchaseSleeveAug(s, 'HemoRecirculator'); //$45.000m
@@ -83,6 +102,21 @@ function buyAugs(ns, s, sl) {
   // ns.sleeve.purchaseSleeveAug(s, 'Bionic Spine'); //$125.000m
   // ns.sleeve.purchaseSleeveAug(s, 'Graphene Bionic Spine Upgrade'); //$6.000b
   // ns.sleeve.purchaseSleeveAug(s, 'CordiARC Fusion Reactor'); //$5.000b
+}
+
+/** @param {NS} ns */
+function buyAllAugs(ns, sleevesDictionary) {
+  // no matter the price.. just buy all
+  for (let s in sleevesDictionary) {
+    let sl = sleevesDictionary[s];
+
+    if (sl.shock != 0) continue;
+    let augs = ns.sleeve.getSleevePurchasableAugs(s);
+    for (let aug of augs)
+    {
+      ns.sleeve.purchaseSleeveAug(s, aug.name);
+    }
+  }
 }
 
 /** @param {SleevePerson} sl */

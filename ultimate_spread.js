@@ -1,19 +1,33 @@
 import { recursive_scan, totalRam } from 'common'
+import { getConfiguration } from 'helpers.js'
 
+const argsSchema = [
+  ['noUpgrades', false], // Don't upgrade the servers - both pservers and hacknet
+  ['useHacknet', true], // Don't upgrade the servers - both pservers and hacknet
+
+];
+export function autocomplete(data, args) {
+  data.flags(argsSchema);
+  return [];
+}
+let runOptions;
 /** Run this script on your home machine. It will run in a loop to fetch all the servers in the network
  *  analyze them. Figure out which ones can be hacked and which can be used to hack. Then spreads the scripts around
  *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are run to not overlap. It's really hard to make this optimal.
  * @param {NS} ns */
 export async function main(ns) {
 
-  let noExpand = ns.args[0];
+  runOptions = getConfiguration(ns, argsSchema);
+  // let noExpand = ns.args[0];
   ns.disableLog('ALL');
-  if (!noExpand) {
+  if (!runOptions.noUpgrades) {
     const expandPid = ns.exec("upgrade_servers.js", 'home');
     if (expandPid != 0)
       ns.tprint("Started server upgrade loop");
   }
-  const servers = new Servers(ns, "", true);
+  // const servers = new Servers(ns, "", true);
+  const servers = new Servers(ns, "", runOptions.useHacknet);
+  // const servers = new Servers(ns, "hacknet", true);
   while (true) {
     servers.update();
     run_script(ns, servers);
@@ -99,6 +113,7 @@ function run_script(ns, allServers) {
       //   console.log(`${serverToHack.name}: ${serverToHack.recommended.scriptName} - ${serverToHack.recommended.runTime}`);
       while (count-- > 0) {
         let wait = count == split || count == 0 ? 1 : Math.ceil(serverToHack.recommended.runTime / split * count);
+        if (wait < 0) wait = 0;
         // let scriptPid = ns.exec(serverToHack.recommended.scriptName + '.js', execServ.name, thNo, 1, serverToHack.name);
         let scriptPid = ns.exec(serverToHack.recommended.scriptName + '.js', execServ.name, thNo, wait, serverToHack.name);
         if (scriptPid != 0) {
@@ -138,7 +153,7 @@ function run_script(ns, allServers) {
 
 export class Servers {
   /** @param {NS} ns */
-  constructor(ns, namePart = "", useHacknet = false) {
+  constructor(ns, namePart = "", useHacknet = false, useNetwork = false) {
     this.namePart = namePart;
     this.ns = ns;
     this.useHacknet = useHacknet;
@@ -169,6 +184,7 @@ export class Servers {
     if (this.numberOfPortsOpenable < 5)
       this.numberOfPortsOpenable = ServerAnalysis.numberOfPortsOpenable(this.ns);
     for (const serv of this.allServers) {
+      // if (this.namePart === "" || serv.name.includes(this.namePart))
       serv.update(this.runningScripts[serv.name], this.numberOfPortsOpenable, this.ns.getServer('home').cpuCores)
     }
   }
@@ -188,6 +204,8 @@ export class Servers {
     const executable = [];
     for (const server of this.allServers) {
       if (server.name.includes('hacknet') && !this.useHacknet) continue;
+      
+      if (!server.name.includes(this.namePart)) continue;
       if (server.canExecute)
         executable.push(server);
     }
@@ -225,7 +243,8 @@ export class Servers {
   totalRunnableScriptThreads() {
     let totalRunnableScriptThreads = 0;
     for (const server of this.allServers) {
-      totalRunnableScriptThreads += server.hackability.runnableScriptThreads;
+      if (server.hackability.runnableScriptThreads)
+        totalRunnableScriptThreads += server.hackability.runnableScriptThreads;
     }
     return totalRunnableScriptThreads;
   };
@@ -469,6 +488,7 @@ ServerAnalysis.hackTools = {
  * */
 function threadsToWeaken(ns, securityLevelsToDecrease, cores) {
   if (securityLevelsToDecrease == 0) return 1;
+  if (securityLevelsToDecrease > 100000) return 1;
   // this also made the code run worse for whatever reason when a lot of ram is there
   // let levelDecreasedOnSingleThread = ns.weakenAnalyze(1, cores);
   // return Math.ceil(securityLevelsToDecrease / levelDecreasedOnSingleThread);
@@ -486,6 +506,7 @@ export function ramNeededForExternalScripts(ns) {
 
   ramNeeded += countRamIfNotRunning(ns, 'singl.js');
   ramNeeded += countRamIfNotRunning(ns, 'background_loop.js');
+  ramNeeded += countRamIfNotRunning(ns, 'stockmaster.js');
   ramNeeded += countRamIfNotRunning(ns, 'ultimate_spread.js');
   ramNeeded += countRamIfNotRunning(ns, 'sleeve.js');
   ramNeeded += countRamIfNotRunning(ns, 'infi_loop.js');

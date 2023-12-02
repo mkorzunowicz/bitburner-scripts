@@ -142,6 +142,29 @@ export function formatDuration(seconds) {
   return `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
 }
 
+/** Do a countdown with a message. Default time is 15 s
+ * @param {number} message
+ * @param {number} counter
+ */
+export async function countDown(ns, message, counter = 16) {
+  let go = true;
+  function handleEscape(event) {
+    if (event.key === 'Escape' || event.keyCode === 27) {
+      go = false;
+      doc.removeEventListener('keydown', handleEscape);
+    }
+  }
+  doc.addEventListener('keydown', handleEscape);
+
+  log(ns, `${message} in ${counter - 1}s. Press ESC to cancel. `, 'info', 1000 * counter);
+  while (counter-- > 0 && go) {
+    ns.toast(counter, 'warning', 1000);
+    await ns.sleep(1000);
+  }
+  doc.removeEventListener('keydown', handleEscape);
+  return go;
+}
+
 /** Returns string date from the moment BitNode got reset
  * @param {NS} ns
  */
@@ -154,15 +177,15 @@ export function timeSinceBitNodeReset(ns) {
  * @param {scriptName} name of the string to run (must include .js)
  * @param {param} parameter to pass, optional
  */
-export function startScript(ns, scriptName, kill = false, param = null) {
-  if (param) {
-    if (!ns.isRunning(scriptName, 'home', param)) {
-      if (ns.exec(scriptName, 'home', 1, param) != 0)
+export function startScript(ns, scriptName, kill = false, param = null, where = 'home') {
+  if (param instanceof Array && param.length > 0) {
+    if (!ns.isRunning(scriptName, where, ...param)) {
+      if (ns.exec(scriptName, where, 1, ...param) != 0)
         return 3;
     } else {
       if (kill) {
-        ns.kill(scriptName, 'home');
-        if (ns.exec(scriptName, 'home', 1, param) != 0)
+        ns.kill(scriptName, where);
+        if (ns.exec(scriptName, where, 1, ...param) != 0)
           return 4;
         else {
           log(ns, `Couldn't start ${scriptName}!!!`, 'error');
@@ -171,8 +194,24 @@ export function startScript(ns, scriptName, kill = false, param = null) {
       } else { return 5; }
     }
   }
-  else if (!ns.isRunning(scriptName, 'home')) {
-    if (ns.exec(scriptName, 'home', 1) != 0)
+  if (!(param instanceof Array) && param) {
+    if (!ns.isRunning(scriptName, where, param)) {
+      if (ns.exec(scriptName, where, 1, param) != 0)
+        return 3;
+    } else {
+      if (kill) {
+        ns.kill(scriptName, where);
+        if (ns.exec(scriptName, where, 1, param) != 0)
+          return 4;
+        else {
+          log(ns, `Couldn't start ${scriptName}!!!`, 'error');
+          return 0;
+        }
+      } else { return 5; }
+    }
+  }
+  else if (!ns.isRunning(scriptName, where)) {
+    if (ns.exec(scriptName, where, 1) != 0)
       return 1;
 
     log(ns, `Couldn't start ${scriptName}!!!`, 'error');
@@ -180,8 +219,8 @@ export function startScript(ns, scriptName, kill = false, param = null) {
   }
   else {
     if (kill) {
-      ns.kill(scriptName, 'home');
-      if (ns.exec(scriptName, 'home', 1) != 0)
+      ns.kill(scriptName, where);
+      if (ns.exec(scriptName, where, 1) != 0)
         return 2;
       else {
         log(ns, `Couldn't start ${scriptName}!!!`, 'error');
@@ -295,6 +334,8 @@ export function findNextBitNode(ns) {
   // can't find the current bitnode :/
   let sourceFiles = ns.singularity.getOwnedSourceFiles();
   let current = ns.getResetInfo().currentNode;
+  return current;
+  // return 12;
   if (current == 12) return 12;
   let curNode = sourceFiles.filter(node => node.n == current)[0];
   if (curNode) {
@@ -409,4 +450,14 @@ export function totalRam(ns) {
       total += ns.getServerMaxRam(serv);
   }
   return total;
+}
+
+export function randomString(length) {
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  let randomString = '';
+  for (let i = 0; i < length; i++) {
+    const randomIndex = Math.floor(Math.random() * charset.length);
+    randomString += charset[randomIndex];
+  }
+  return randomString;
 }

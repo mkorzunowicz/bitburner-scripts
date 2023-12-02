@@ -149,9 +149,15 @@ export async function main(ns) {
     let successful = 0;
     function handleEscapeKey(event) {
         if (event.key === 'Escape' || event.keyCode === 27) {
+            if (shouldRun) {
+                try {
+                    console.log('Escape key pressed. Cancelling infiltration');
+                    clickByXpath(cancelXpath);
+                }
+                catch (error) { }
+            }
             shouldRun = false;
-            console.log('Escape key pressed. Cancelling infiltration');
-            clickByXpath(cancelXpath);
+            doc.removeEventListener('keydown', handleEscapeKey);
         }
     }
     doc.addEventListener('keydown', handleEscapeKey);

@@ -1,11 +1,29 @@
-import { log, timeTakenInSeconds, crackPorts, jumpTo, formatDuration, startScript, numberOfPortsOpenable, findNextBitNode, clickByXpath, timeSinceBitNodeReset, LogState, expandServers, stopExpandingServers } from 'common.js'
-
+import { log, timeTakenInSeconds, crackPorts, jumpTo, countDown, formatDuration, startScript, numberOfPortsOpenable, findNextBitNode, clickByXpath, timeSinceBitNodeReset, LogState, expandServers, stopExpandingServers } from 'common.js'
+import { getConfiguration } from 'helpers.js'
 const wnd = eval("window");
 const doc = wnd["document"];
-const AUGS_PER_RUN = 6; // some smarter way to grind Fluxes is needed.. re grinding rep might be sub optimal
+let AUGS_PER_RUN = 6; // some smarter way to grind Fluxes is needed.. re grinding rep might be sub optimal
 let shouldRun = true;
-let singlRunNumber;
-let shouldKillWorldDaemon = true;
+const argsSchema = [
+  ['noUpgrades', false], // Don't upgrade the servers - both pservers and hacknet
+  // ['dontKillWorldDaemon', true], // Don't kill the World Deamon, run indefinitely
+  ['dontKillWorldDaemon', true], // Don't kill the World Deamon
+  ['forceIntro', false], // Force intro runs
+  ['dontInstallAugments', false], // run normally, juts don't install augs when enough
+  ['grindAugments', false], // try to grind as many from everywhere, used for "40 queued", "install 100", '255 neuroflux' after you're overflowing with money from a corporation
+  ['noSleeves', false], // BN10 challenge
+  ['corpo', false], // start corporation scripts
+  ['limitHomeUpgrades', false], //BN1 challenge
+  ['noStanek', false], //BN1 challenge
+
+];
+
+export function autocomplete(data, args) {
+  data.flags(argsSchema);
+  return [];
+}
+let runOptions;
+
 /** This scripts takes advantage of automated Infiltration to the max - it starts by runing intro runs to gather money, buy home cpu and ram upgrades, buy tor and hacks.
  * Then it iterates through available Hacking augmentations and tries to buy all of the available ones. Avoids direct Combat skill multipliers (not combat exp though)
  * as it reduces infiltration rewards, which is crucial for us. We can upgrade combat skills after about 20 hours (depnding on the BN) when there is enough money generated through scripts,
@@ -19,18 +37,33 @@ let shouldKillWorldDaemon = true;
  *  @param {NS} ns */
 export async function main(ns) {
 
-  // shouldKillWorldDaemon = ns.args[0] && ns.args[0].toLowerCase() === 'false';
-  startScript(ns, "infi.js");
+  runOptions = getConfiguration(ns, argsSchema);
+  if (!runOptions) return; // Invalid options, or ran in --help mode.
+
+  if (runOptions.grindAugments) {
+    runOptions.dontInstallAugments = true;
+    runOptions.dontKillWorldDaemon = true;
+    runOptions.noUpgrades = true;
+    AUGS_PER_RUN = 200;
+  }
+
+  startScript(ns, "infi.js", '--quiet');
   // if (startScript(ns, "infi.js")) log(ns, "Infiltration automated.");
-  if (!singlRunNumber) singlRunNumber = 1;
   // const resetInfo = ns.getResetInfo(); const lastAugReset = resetInfo.lastAugReset; ns.tprint(`The last augmentation reset was: ${new Date(lastAugReset)}`); ns.tprint(`It has been ${Date.now() - lastAugReset}ms since the last augmentation reset.`);
   shouldRun = true;
 
+  if (ns.getResetInfo().currentNode == 8) {
+    if (startScript(ns, "stockmaster.js")) log(ns, "Automating stock...", 'info', 2 * 1000);
+    if (startScript(ns, "background_work.js", false, null)) log(ns, "Automating background work...", 'info', 2 * 1000);
+    if (startScript(ns, "sleeve.js", false, null)) log(ns, "Automating sleeves...", 'info', 2 * 1000);
+    if (startScript(ns, "ultimate_spread.js", false, ['--noUpgrades'])) log(ns, "Hacking servers...", 'info', 2 * 1000);
+    if (startScript(ns, "grind_rep.js")) log(ns, "Grinding rep..", 'info', 2 * 1000);
+    return;
+  }
   // TODO: Implement CORPO
-  // TODO: Implement BitRunners
+  // TODO: Implement BladeRunners
 
   ns.disableLog('ALL');
-  let force = ns.args[0];
   const infi = new Infiltration(ns);
   // cancel this loop by pressing ESC
   function handleEscapeKey(event) {
@@ -50,21 +83,42 @@ export async function main(ns) {
 
   // if (startScript(ns, "infi.js")) log(ns, "Infiltration automated.");
   // startScript(ns, "stats.js")
-  if (startScript(ns, "background_work.js")) log(ns, "Automating background work...");
-  if (startScript(ns, "lstanek.js")) log(ns, "Staneking...");
-  if (startScript(ns, "sleeve.js")) log(ns, "Automating sleeves...");
-  if (startScript(ns, "ultimate_spread.js", false, 'noexpand')) log(ns, "Hacking servers...");
+  if (!runOptions.grindAugments) {
 
+    let runOn = runOptions.limitHomeUpgrades ? 'pserv-0' : 'home';
+    // stockmaster isn't really spectacular in normal operation
+    // if (startScript(ns, "stockmaster.js")) log(ns, "Automating stock...", 'info', 2 * 1000);
+    if (startScript(ns, "background_work.js", false, null, runOn)) log(ns, "Automating background work...", 'info', 2 * 1000);
+    if (!runOptions.noStanek)
+      if (startScript(ns, "lstanek.js", false, null, runOn)) log(ns, "Staneking...", 'info', 2 * 1000);
+    if (!runOptions.noSleeves)
+      if (startScript(ns, "sleeve.js", false, null, runOn)) log(ns, "Automating sleeves...", 'info', 2 * 1000);
+    if (startScript(ns, "ultimate_spread.js", false, ['--noUpgrades'], runOn)) log(ns, "Hacking servers...", 'info', 2 * 1000);
+    if (runOptions.corpo) {
+      if (startScript(ns, "zcorp.js", false, ['--loopMorale'], runOn)) log(ns, "Hacking servers...", 'info', 2 * 1000);
+      if (startScript(ns, "zcorp.js", false, ['--remakeProducts'], runOn)) log(ns, "Hacking servers...", 'info', 2 * 1000);
+      if (startScript(ns, "zcorp.js", false, ['--steadyGrowth'], runOn)) log(ns, "Hacking servers...", 'info', 2 * 1000);
+    }
+    if (ns.getResetInfo().currentNode == 8) {
+      while (shouldRun) {
+        await killW0r1dD43m0n(ns);
+        await ns.sleep(10000);
+      }
+      return;
+    }
+  }
   await killW0r1dD43m0n(ns); // check and try to destroy the BitNode
   //  this shouldn't be really needed - this script must be executed at the very beginning after restart
-  if (force || !ns.hasTorRouter() || numberOfPortsOpenable(ns) < 5) {
+  if (runOptions.forceIntro || !ns.hasTorRouter() || numberOfPortsOpenable(ns) < 5) {
     await runIntro(ns, infi, runNumber);
   }
 
   // await upgradeHome(ns, infi, 3, 8192 * 2); // this takes too long - 1,5h.. better to start when homi is reachable
   if (!shouldRun) { log(ns, 'Escape key pressed. Cancelling singl.js', 'error'); return; }
 
-  await killW0r1dD43m0n(ns);
+  // TODO: uncomment for normal execution
+  // await killW0r1dD43m0n(ns);
+
   // // if (runNumber < 8) {
   // if (ns.getPlayer().skills.hacking < 2500) {
   //   stopExpandingServers(ns);
@@ -77,25 +131,33 @@ export async function main(ns) {
       log(ns, `Joined: ${factionname}`, 'warning');
   }
 
-  while (ns.singularity.upgradeHomeRam())
-    log(ns, `Upgraded ram to ${ns.getServer('home').maxRam} on aug install`, 'success', 5 * 1000, true);
+  if (!runOptions.dontInstallAugments) {
+    if (!runOptions.limitHomeUpgrades) {
+      while (ns.singularity.upgradeHomeRam())
+        log(ns, `Upgraded ram to ${ns.getServer('home').maxRam} on aug install`, 'success', 5 * 1000, true);
 
-  while (ns.singularity.upgradeHomeCores())
-    log(ns, `Upgraded cores to ${ns.getServer('home').cpuCores} on aug install`, 'success', 5 * 1000, true);
+      while (ns.singularity.upgradeHomeCores())
+        log(ns, `Upgraded cores to ${ns.getServer('home').cpuCores} on aug install`, 'success', 5 * 1000, true);
+    }
+    shouldRun = await countDown(ns, '`Installing Augmentations', 6);
+    if (!shouldRun) { log(ns, 'Escape key pressed. Cancelling singl.js', 'error'); return; }
+    // let counter = 6;
+    // log(ns, `Installing Augmentations in ${counter}s. Press ESC to cancel. `, 'warning', 1000 * 10);
+    // while (counter-- > 0 && shouldRun) {
+    //   ns.toast(counter, 'warning', 1000);
+    //   await ns.sleep(1000);
+    // }
+    LogState.resetAugInstall();
+    log(ns, `AUGMENTS INSTALLED: ${ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length}. Run took: ${formatDuration(ns.getTimeSinceLastAug() / 1000)}`, 'success', 60000, true);
 
-  singlRunNumber++;
-
-  let counter = 6;
-  log(ns, `Installing Augmentations in ${counter}s. Press ESC to cancel. `, 'warning', 1000 * 10);
-  while (counter-- > 0 && shouldRun) {
-    ns.toast(counter, 'warning', 1000);
-    await ns.sleep(1000);
+    ns.singularity.installAugmentations('starter.js');
   }
-  LogState.resetAugInstall();
-  log(ns, `AUGMENTS INSTALLED: ${ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length}. Run took: ${formatDuration(ns.getTimeSinceLastAug() / 1000)}`, 'success', 60000, true);
-
-  ns.singularity.installAugmentations('starter.js');
+  else {
+    log(ns, `NO AUGS INSTALLED AS PER CONFIG. AUGS READY ${ns.singularity.getOwnedAugmentations(true).length - ns.singularity.getOwnedAugmentations().length}. Run took: ${formatDuration(ns.getTimeSinceLastAug() / 1000)}`, 'success', 60000, true);
+  }
 }
+
+
 
 /** Intro runs - run once, buy tor and hack tools.
  * Then grind different faction each run 
@@ -117,7 +179,7 @@ async function runIntro(ns, infi, runNumber) {
   if (ns.singularity.joinFaction('Shadows of Anarchy'))
     log(ns, `Joined: ${'Shadows of Anarchy'}`, 'warning');
   buyApps(ns);
-  expandServers(ns);
+  if (!runOptions.noUpgrades) expandServers(ns);
   if (startScript(ns, "backdoor_loop.js")) log(ns, "Backdooring...");
 
   await killW0r1dD43m0n(ns); // check and try to destroy the BitNode
@@ -131,6 +193,8 @@ async function runIntro(ns, infi, runNumber) {
   // if (runNumber >= 5 && runNumber <= 6) await runIntroInfi(ns, infi, 'Volhaven', 'OmniTek Incorporated');
 
   // ns.singularity.purchaseAugmentation('Shadows of Anarchy', 'SoA - phyzical WKS harmonizer');
+
+  if (runOptions.limitHomeUpgrades) return;
 
   if (runNumber == 0) {
     Array.from({ length: 6 }, () => {
@@ -157,6 +221,7 @@ async function runIntroInfi(ns, infi, cityFaction, company) {
  * @param {Infiltration} infi
 */
 async function upgradeHome(ns, infi, cores = 3, ram = 8192 * 2) {
+  if (runOptions.limitHomeUpgrades) return;
   stopExpandingServers(ns);
 
   let h = ns.getServer('home');
@@ -210,7 +275,8 @@ async function grindAugmentations(ns, infi, runNumber) {
       joinFactions(ns, 0);
     }
 
-    let best = findAugmentationToBuy(ns, null, true, true, prioFactions, true);
+    let best = findAugmentationToBuy(ns, null, !runOptions.grindAugments, !runOptions.grindAugments, prioFactions, true);
+    // let best = findAugmentationToBuy(ns, null, true, true, prioFactions, true);
     if (best) {
       if (await infi.grindRep(best)) {
         if (!shouldRun) break;
@@ -224,7 +290,7 @@ async function grindAugmentations(ns, infi, runNumber) {
     }
     await killW0r1dD43m0n(ns); // check and try to destroy the BitNode
     if (ns.getPlayer().skills.hacking > 3000)
-      expandServers(ns);
+      if (!runOptions.noUpgrades) expandServers(ns);
     await ns.sleep(100);
     pl = ns.getPlayer();
   }
@@ -232,9 +298,15 @@ async function grindAugmentations(ns, infi, runNumber) {
   if (shouldRun)
     log(ns, `Got ${AUGS_PER_RUN}, checking leftover augs`, 'warning', 10 * 1000);
   joinFactions(ns, 0);
+
+  stopExpandingServers(ns);
+
+  if (!runOptions.grindAugments)
+    startScript(ns, "stockmaster.js", false, ['-l']);
+
   let leftoverAugmentation;
-  // while (shouldRun && (leftoverAugmentation = findAugmentationToBuy(ns, ns.getPlayer().money, true, true, prioFactions, false))) {
   while (shouldRun && (leftoverAugmentation = findAugmentationToBuy(ns, ns.getPlayer().money, true, true, prioFactions, true))) {
+    // while (shouldRun && (leftoverAugmentation = findAugmentationToBuy(ns, ns.getPlayer().money, !runOptions.grindAugments, !runOptions.grindAugments, prioFactions, true))) {
     // if we still have money to buy any hack augmentations.. but can grind rep
     if (leftoverAugmentation.repRuns > 30) {
       log(ns, `Leftover would take ${leftoverAugmentation.repRuns} to run.. skipping as it's more than 30`, 'warning', 10 * 1000);
@@ -292,7 +364,7 @@ function buyAugmentation(ns, aug) {
  * @param {boolean} noShadows Filter out Shadows of Anarchy faction if true
  * @param {Array<string>} prioritizeFactions Array of factions which should be prioritized during selection
  * */
-function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, noShadows = true, prioritizeFactions = [], allowNeuroFlux = false) {
+export function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, noShadows = true, prioritizeFactions = [], allowNeuroFlux = false) {
   let pl = ns.getPlayer();
   const owned = ns.singularity.getOwnedAugmentations(true);
   const notInstalled = owned.length - ns.singularity.getOwnedAugmentations(false).length;
@@ -405,19 +477,21 @@ function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = true, no
  * Will be announce and gives a chance to stop.
  * @param {NS} ns */
 async function killW0r1dD43m0n(ns) {
-  if (!shouldKillWorldDaemon) return;
+  if (!runOptions || runOptions.dontKillWorldDaemon) return;
   const target = 'w0r1d_d43m0n';
   if (ns.getHackingLevel() > ns.getServerRequiredHackingLevel(target) && ns.singularity.getOwnedAugmentations().includes('The Red Pill')) {
-    if (!crackPorts(ns, target)) {
+    if (numberOfPortsOpenable(ns) < 5) {
       log(ns, `Couldn't crack ports on w0r1d_d43m0n`, 'warning', 1000 * 30);
       return;
     }
-    log(ns, `Killing BITNODE in 15 seconds. Press ESC to cancel. `, 'warning', 1000 * 30);
-    let counter = 11;
-    while (counter-- > 0 && shouldRun) {
-      ns.toast(counter, 'warning', 1000);
-      await ns.sleep(1000);
-    }
+
+    shouldRun = await countDown(ns, 'Killing BITNODE', 11);
+    // log(ns, `Killing BITNODE in 15 seconds. Press ESC to cancel. `, 'warning', 1000 * 30);
+    // let counter = 11;
+    // while (counter-- > 0 && shouldRun) {
+    //   ns.toast(counter, 'warning', 1000);
+    //   await ns.sleep(1000);
+    // }
     if (!shouldRun) return;
 
     let next = findNextBitNode(ns);
@@ -431,7 +505,7 @@ async function killW0r1dD43m0n(ns) {
     // await ns.singularity.installBackdoor();
     log(ns, `Killed BITNODE and starting next on ${next} `, 'warning', 1000 * 60 * 30);
 
-    counter = 5;
+    let counter = 5;
     while (counter-- > 0)
       await ns.sleep(1000);
 
@@ -455,7 +529,7 @@ function buyApps(ns) {
   }
 }
 
-class Infiltration {
+export class Infiltration {
   /**
    * @static
    * @type {InfiltrationLocation}
@@ -536,8 +610,10 @@ class Infiltration {
     // if (secondsToGrind < 60)
     if (this.ns.getPlayer().skills.hacking > 6000) { // TODO change this
       log(this.ns, `Skipping infi to buy ${aug.aug} in ${aug.faction}. Waiting ${formatDuration(secondsOfPassive)}s for ${this.ns.nFormat(aug.price, "$0.0a")} to flow in.`, 'warning', secondsOfPassive * 1000);
-      while (this.ns.getPlayer().money < aug.price)
-        await this.ns.sleep(200);
+      while (this.ns.getPlayer().money < aug.price) {
+        await killW0r1dD43m0n(this.ns);
+        await this.ns.sleep(1000);
+      }
     }
     else {
       let runs;
@@ -584,7 +660,7 @@ class Infiltration {
     let factionRep = this.ns.singularity.getFactionRep(aug.faction);
     if (aug.repreq > factionRep) {
       const facFavor = this.ns.singularity.getFactionFavor(aug.faction);
-      if (facFavor >= this.ns.getFavorToDonate() && this.ns.gang.inGang() && this.ns.gang.getGangInformation().faction != aug.faction) {
+      if (facFavor >= this.ns.getFavorToDonate() && !this.ns.gang.inGang() || (facFavor >= this.ns.getFavorToDonate() && this.ns.gang.inGang() && this.ns.gang.getGangInformation().faction != aug.faction)) {
 
         const incomePerSecond = this.ns.getTotalScriptIncome()[0];
         let repGain = await this.repPer100k(aug.faction);
@@ -601,8 +677,10 @@ class Infiltration {
             stopExpandingServers(this.ns);
             log(this.ns, `Waiting ${formatDuration(secondsOfPassive)}s for ${this.ns.nFormat(moneyToBuyRep, "$0.0a")} to donate to ${aug.faction} to buy ${this.ns.nFormat(required, "$0.0a")} rep`, 'warning', secondsOfPassive * 1000);
           }
-          while (this.ns.getPlayer().money < moneyToBuyRep)
-            await this.ns.sleep(200);
+          while (this.ns.getPlayer().money < moneyToBuyRep) {
+            await killW0r1dD43m0n(this.ns);
+            await this.ns.sleep(1000);
+          }
 
           if (this.ns.singularity.donateToFaction(aug.faction, moneyToBuyRep)) {
             log(this.ns, `Donated: ${this.ns.nFormat(moneyToBuyRep, "$0.0a")} to ${aug.faction} to buy ${this.ns.nFormat(required, "$0.0a")} rep`);
@@ -648,12 +726,14 @@ class Infiltration {
 
       await clickByXpath('//*[@aria-label="save game"]');
       // log(this.ns, 'Waiting 31s to ensure saving the game and reloading to unclog Infiltration. Press ESC to cancel...', 'warning', 30 * 1000);
-      log(this.ns, 'Reloading to unclog Infiltration. Press ESC to cancel...', 'warning', 30 * 1000);
-      let counter = 4;
-      while (counter-- > 0 && shouldRun) {
-        this.ns.toast(counter, 'warning', 1000);
-        await this.ns.sleep(1000);
-      }
+
+      shouldRun = await countDown(this.ns, 'Reloading to unclog Infiltration', 4);
+      // log(this.ns, 'Reloading to unclog Infiltration. Press ESC to cancel...', 'warning', 30 * 1000);
+      // let counter = 4;
+      // while (counter-- > 0 && shouldRun) {
+      //   this.ns.toast(counter, 'warning', 1000);
+      //   await this.ns.sleep(1000);
+      // }
 
       await clickByXpath('//*[@aria-label="save game"]');
       if (shouldRun) {

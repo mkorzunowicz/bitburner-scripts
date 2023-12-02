@@ -65,7 +65,7 @@ export async function main(ns) {
     }
 
     hook0.innerText += "\nSingl running";
-    if (ns.isRunning('singl.js'))
+    if (ns.isRunning('singl.js') || ns.isRunning('singl.js', 'home', ...['--noUpgrades']))
       hook1.innerText += "\nYES";
     else
       hook1.innerText += "\nNO";
