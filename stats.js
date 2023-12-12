@@ -55,6 +55,26 @@ export async function main(ns) {
     else
       hook1.innerText += "\nNO";
 
+    if (ns.corporation.hasCorporation()) {
+      hook0.innerText += "\nCorpo auto";
+      if (ns.isRunning('zcorp.js'))
+        hook1.innerText += "\nYES";
+      else
+        hook1.innerText += "\nNO";
+
+      hook0.innerText += "\nFunds";
+      hook1.innerText += `\n${ns.nFormat(ns.corporation.getCorporation().funds, "$0.0a")}`;
+      hook0.innerText += "\nProfit";
+      hook1.innerText += `\n${ns.nFormat(ns.corporation.getCorporation().revenue - ns.corporation.getCorporation().expenses, "$0.0a")}/s`;
+      if (ns.corporation.getCorporation().public) {
+        hook0.innerText += "\nDiv earnings";
+        hook1.innerText += `\n${ns.nFormat(ns.corporation.getCorporation().dividendEarnings, "$0.0a")}/s`;
+      } else {
+        hook0.innerText += "\nInvestment";
+        hook1.innerText += `\n${ns.nFormat(ns.corporation.getInvestmentOffer().funds, "$0.0a")}`;
+      }
+    }
+
     if (!hasTor) {
       hook0.innerText += "\nTor";
       hook1.innerText += "\nNO";
@@ -78,7 +98,7 @@ export async function main(ns) {
 
     hook0.innerText += "\nTotal ram";
     hook1.innerText += `\n${ns.formatRam(totalRam(ns))}`;
-    
+
 
     await ns.sleep(1000);
   }

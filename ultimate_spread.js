@@ -4,6 +4,7 @@ import { getConfiguration } from 'helpers.js'
 const argsSchema = [
   ['noUpgrades', false], // Don't upgrade the servers - both pservers and hacknet
   ['useHacknet', true], // Don't upgrade the servers - both pservers and hacknet
+  ['noStanek', true], // Don't upgrade the servers - both pservers and hacknet
 
 ];
 export function autocomplete(data, args) {
@@ -11,11 +12,14 @@ export function autocomplete(data, args) {
   return [];
 }
 let runOptions;
+
+let shouldRun;
 /** Run this script on your home machine. It will run in a loop to fetch all the servers in the network
  *  analyze them. Figure out which ones can be hacked and which can be used to hack. Then spreads the scripts around
  *  with a relatively optimal RAM usage. TODO: Optimize when the scripts are run to not overlap. It's really hard to make this optimal.
  * @param {NS} ns */
 export async function main(ns) {
+  shouldRun = true;
 
   runOptions = getConfiguration(ns, argsSchema);
   // let noExpand = ns.args[0];
@@ -28,7 +32,7 @@ export async function main(ns) {
   // const servers = new Servers(ns, "", true);
   const servers = new Servers(ns, "", runOptions.useHacknet);
   // const servers = new Servers(ns, "hacknet", true);
-  while (true) {
+  while (shouldRun) {
     servers.update();
     run_script(ns, servers);
     await ns.sleep(1);
@@ -203,8 +207,9 @@ export class Servers {
   executable() {
     const executable = [];
     for (const server of this.allServers) {
-      if (server.name.includes('hacknet') && !this.useHacknet) continue;
-      
+      // if (server.name.includes('hacknet') && !this.useHacknet) continue;
+      if (server.name.includes('hacknet') && (this.ns.scriptRunning('zcorp.js', 'home') || !this.useHacknet)) continue;
+
       if (!server.name.includes(this.namePart)) continue;
       if (server.canExecute)
         executable.push(server);
@@ -303,6 +308,7 @@ class ServerAnalysis {
    * */
   update(runningScripts, openablePorts, homeCores) {
     const target = this.name;
+    if (!shouldRun) return;
     this.moneyMax = this.ns.getServerMaxMoney(target);
     this.securityMin = this.ns.getServerMinSecurityLevel(target);
     if (this.name == 'home' && this.cpuCores < 8)
@@ -516,14 +522,19 @@ export function ramNeededForExternalScripts(ns) {
   ramNeeded += countRamIfNotRunning(ns, 'upgrade_servers.js');
   ramNeeded += countRamIfNotRunning(ns, 'jumpbd.js');
   // ramNeeded += ns.getScriptRam('corpo.js');
+  ramNeeded += ns.getScriptRam('zcorp.js');
 
-  if (ns.stanek.acceptGift())
-    ramNeeded += countRamIfNotRunning(ns, 'lstanek.js');
+  if (!runOptions.noStanek) {
+    if (ns.stanek.acceptGift())
+      ramNeeded += countRamIfNotRunning(ns, 'lstanek.js');
+  }
   return ramNeeded;
 }
 
 export function ramForStanek(ns, homeRam) {
   let needed = 0;
+
+  if (runOptions.noStanek) return needed;
   if (ns.stanek.acceptGift()) {
     let total = totalRam(ns);
     const ofTotal = Math.floor(total * 0.15);

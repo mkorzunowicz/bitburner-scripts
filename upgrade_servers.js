@@ -7,9 +7,9 @@ let quiet = true;
 
 
 const argsSchema = [
-  ['upgradeFullHacknet', false], 
-  ['noHomeUpgrades', false], 
-  ['quiet', true], 
+  ['upgradeFullHacknet', false],
+  ['noHomeUpgrades', false],
+  ['quiet', true],
 
 ];
 export function autocomplete(data, args) {
@@ -21,7 +21,7 @@ let runOptions;
 
 /** @param {NS} ns */
 export async function main(ns) {
-  
+
   runOptions = getConfiguration(ns, argsSchema);
 
   if (runOptions.loopMorale) {
@@ -135,19 +135,18 @@ function upgradeHacknetServers(ns) {
         if (!quiet)
           log(ns, `Upgraded hacknet ${i} ram to for ${ns.nFormat(ramCost, "$0.000a")}`, 'success', 15 * 1000, false);
 
-    if (!runOptions.upgradeFullHacknet) continue;
+    if (ns.scriptRunning('zcorp.js', 'home') || runOptions.upgradeFullHacknet) {
+      let cacheCost = ns.hacknet.getCacheUpgradeCost(i);
+      if (available(ns) > cacheCost)
+        if (ns.hacknet.upgradeCache(i))
+          if (!quiet)
+            log(ns, `Upgraded hacknet cache ${i} for ${ns.nFormat(cacheCost, "$0.000a")}`, 'success', 15 * 1000, false);
 
-    let cacheCost = ns.hacknet.getCacheUpgradeCost(i);
-    if (available(ns) > cacheCost)
-      if (ns.hacknet.upgradeCache(i))
-        if (!quiet)
-          log(ns, `Upgraded hacknet cache ${i} for ${ns.nFormat(cacheCost, "$0.000a")}`, 'success', 15 * 1000, false);
-
-    let levelCost = ns.hacknet.getLevelUpgradeCost(i);
-    if (available(ns) > levelCost)
-      if (ns.hacknet.upgradeLevel(i))
-        if (!quiet)
-          log(ns, `Upgraded hacknet level ${i} for ${ns.nFormat(levelCost, "$0.000a")}`, 'success', 15 * 1000, false);
+      let levelCost = ns.hacknet.getLevelUpgradeCost(i);
+      if (available(ns) > levelCost)
+        if (ns.hacknet.upgradeLevel(i))
+          if (!quiet)
+            log(ns, `Upgraded hacknet level ${i} for ${ns.nFormat(levelCost, "$0.000a")}`, 'success', 15 * 1000, false);
+    }
   }
-
 }

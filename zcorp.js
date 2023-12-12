@@ -1,5 +1,5 @@
 import { getConfiguration } from 'helpers.js'
-import { randomString, startScript, log } from 'common.js'
+import { randomString, startScript, log, LogState } from 'common.js'
 
 let corpoName = 'PalMale';
 let tobaccoDiv = 'tabac'
@@ -12,9 +12,9 @@ const argsSchema = [
   ['loopMorale', false], // upgrade morale in loop
   ['buyResearchFromHacknet', false], // buy research from hashes
   ['remakeProducts', false], // loop making tobacco products
-  ['exportOnlyRequired', false], // loop making tobacco products
   ['steadyGrowth', false], // loop making tobacco products
   ['exportLoop', false], // loop making tobacco products
+  ['researchLoop', false], // loop making tobacco products
 ];
 export function autocomplete(data, args) {
   data.flags(argsSchema);
@@ -24,8 +24,7 @@ let runOptions;
 
 const _1b = 1_000_000_000;
 const _1m = 1_000_000;
-const cities = ['Aevum', 'Sector-12', 'Volhaven', 'Chongqing', 'New Tokyo', 'Ishima']
-
+const cityNames = ['Aevum', 'Sector-12', 'Volhaven', 'Chongqing', 'New Tokyo', 'Ishima']
 
 
 /** @param {NS} ns */
@@ -37,14 +36,25 @@ export async function main(ns) {
   if (runOptions.loopMorale) {
     while (shouldRun) {
       await bumpMoraleAndEnergy(ns);
-      await ns.sleep(5000);
+      await ns.sleep(1000);
+      if (LogState.augmentationCountdown) {
+        // we are about to install augmentations - spend the accumulated hashes, as they reset per installation
+        debugger
+        buyAllFundsFromHacknet(ns);
+        buyAllReserachFromHacknet(ns);
+      }
     }
     return;
   }
-  // one time thing - not required as loop does that
-  // potentially we might want to add hacknet upgrades here on start
+
+  // one time thing - not required as loop does that later
   if (runOptions.buyResearchFromHacknet) {
     buyAllReserachFromHacknet(ns);
+    return;
+  }
+
+  if (runOptions.researchLoop) {
+    await researchLoop(ns);
     return;
   }
 
@@ -53,26 +63,16 @@ export async function main(ns) {
     return;
   }
 
-  if (runOptions.exportOnlyRequired) {
-    await exportOnlyRequired(ns, 'water');
-    return;
-  }
-
   if (runOptions.exportLoop) {
     await exportLoop(ns);
     return;
   }
 
-
-  // NOTE: no preparation code for corpo.. do as this says, run --remakeProducts, run --loopMorale, run --steadyGrowth
-  // run ultimate_spread.js; run zcorp.js --loopMorale; run zcorp.js --remakeProducts; run zcorp.js --steadyGrowth; run stats.js;
-  // to grind augs 
-  // run singl.js --grindAugments 
-
   if (runOptions.steadyGrowth) {
     let counter = 0;
     while (shouldRun) {
-      await steadyGrowth(ns, null, false, false, true, true, true);
+      await steadyGrowth(ns, 'Tobacco', false, false, true, true, true);
+      // await steadyGrowth(ns, null, false, false, true, true, true);
       // await steadyGrowth(ns, null, true, true, true, true, true);
       await ns.sleep(100);
       counter++;
@@ -125,34 +125,298 @@ export async function main(ns) {
 }
 
 /** @param {NS} ns */
+async function growthLevelReached(ns, level) {
+  const { divType, equipment, noOfCities, whLevel, staff, advLevel, upgradesLevel } = level;
+
+  var divs = divType ? ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d)).filter(d => d.type == divType) : ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d));
+  for (let div of divs) {
+    // adverts
+    if (ns.corporation.getHireAdVertCount(div.name) < advLevel)
+      return false;
+    if (ns.corporation.getDivision(div.name).cities.length < noOfCities)
+      return false;
+    for (let city of div.cities)
+      if (!ns.corporation.hasWarehouse(div.name, city) || ns.corporation.getWarehouse(div.name, city).level < whLevel)
+        return false;
+
+    for (let city of div.cities)
+      for (let role of staff)
+        if (ns.corporation.getOffice(div.name, city).employeeJobs[role.name] < role.count)
+          return false;
+
+    for (let city of div.cities)
+      for (let eq of equipment)
+        if (ns.corporation.getMaterial(div.name, city, eq.name).stored < eq.amount)
+          return false;
+
+  }
+  // upgrades
+  for (let upg of upgradesLevel) {
+    if (ns.corporation.getUpgradeLevel(upg.name) < upg.lvl)
+      return false;
+  }
+  return true;
+}
+/** @param {NS} ns */
+async function growTo(ns, level) {
+  const { divType, equipment, noOfCities, whLevel, staff, advLevel, upgradesLevel } = level;
+
+  // level upgrades
+  for (let upg of upgradesLevel) {
+    upgradeTo(ns, [upg.name], upg.lvl);
+  }
+
+  var divs = divType ? ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d)).filter(d => d.type == divType) : ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d));
+  for (let div of divs) {
+
+    // hire adverts
+    while (ns.corporation.getHireAdVertCount(div.name) < advLevel && ns.corporation.getHireAdVertCost(div.name) < ns.corporation.getCorporation().funds)
+      ns.corporation.hireAdVert(div.name);
+
+    // expand
+    while (ns.corporation.getDivision(div.name).cities.length < noOfCities)
+      for (let city of cityNames)
+        if (!ns.corporation.getDivision(div.name).cities.includes(city))
+          try {
+            ns.corporation.expandCity(div.name, city);
+          } catch { break; }
+    // buy warehouse
+    for (let city of ns.corporation.getDivision(div.name).cities) {
+      if (!ns.corporation.hasWarehouse(div.name, city))
+        ns.corporation.purchaseWarehouse(div.name, city);
+    }
+    // upgrade warehouse
+    for (let city of ns.corporation.getDivision(div.name).cities) {
+      while (ns.corporation.hasWarehouse(div.name, city) && ns.corporation.getWarehouse(div.name, city).level < whLevel)
+        if (ns.corporation.getCorporation().funds > ns.corporation.getUpgradeWarehouseCost(div.name, city))
+          ns.corporation.upgradeWarehouse(div.name, city, 1);
+        else break;
+    }
+    setSell(ns, div.name);
+
+    // hire staff
+    for (let city of cityNames) {
+      hireStaffTo(ns, div, city, staff);
+    }
+
+    // buy equipement
+    for (let city of ns.corporation.getDivision(div.name).cities) {
+      for (let eq of equipment)
+        buyToQuantity(ns, div.name, city, eq.name, eq.amount, true);
+    }
+  }
+}
+
+/** @param {NS} ns */
+function setSell(ns, divName) {
+  let div = ns.corporation.getDivision(divName);
+  for (let city of div.cities) {
+    if (!ns.corporation.hasWarehouse(div.name, city)) return;
+    if (div.type == 'Agriculture') {
+      ns.corporation.sellMaterial(div.name, city, 'Plants', 'MAX', 'MP');
+      ns.corporation.sellMaterial(div.name, city, 'Food', 'MAX', 'MP');
+    }
+    if (div.type == 'Spring Water') {
+      ns.corporation.sellMaterial(div.name, city, 'Water', 'MAX', 'MP');
+    }
+    if (div.type == 'Chemical') {
+      ns.corporation.sellMaterial(div.name, city, 'Chemicals', 'MAX', 'MP');
+    }
+  }
+}
+
+/** @param {NS} ns */
 async function runCorpo(ns) {
-  debugger
   if (!await startCorpo(ns)) return;
 
   if (startScript(ns, "zcorp.js", true, '--loopMorale', runOn)) log(ns, "Automating corpo morale...", 'info', 2 * 1000);
+  if (!ns.corporation.hasUnlock('Smart Supply'))
+    ns.corporation.purchaseUnlock('Smart Supply');
+  // init upgrades
+
+  let ags = startIndustry(ns, 'Agriculture', agriDiv);
+
+  let level1 = {
+    divType: 'Agriculture',
+    equipment: [{ name: 'Hardware', amount: 125 }, { name: 'AI Cores', amount: 75 }, { name: 'Robots', amount: 0 }, { name: 'Real Estate', amount: 27000 }],
+    noOfCities: cityNames.length,
+    whLevel: 2,
+    staff: [{ name: "Operations", count: 1 }, { name: "Engineer", count: 1 }, { name: "Business", count: 1 }],
+    advLevel: 1,
+    upgradesLevel: [
+      { name: 'FocusWires', lvl: 1 },
+      // { name: 'Wilson Analytics', lvl: 2 },
+      { name: 'Neural Accelerators', lvl: 1 },
+      { name: 'Speech Processor Implants', lvl: 1 },
+      { name: 'Nuoptimal Nootropic Injector Implants', lvl: 1 },
+      { name: 'Smart Factories', lvl: 1 },
+    ]
+  };
+
+  while (!await growthLevelReached(ns, level1) && shouldRun) {
+    await growTo(ns, level1);
+    buyAllFundsFromHacknet(ns);
+    await ns.sleep(1000);
+  }
+
+  log(ns, "Corpo: Stage 2 agriculture started...", 'info', 2 * 1000);
+  let level2 = {
+    divType: 'Agriculture',
+    equipment: [{ name: 'Hardware', amount: 2800 }, { name: 'AI Cores', amount: 2520 }, { name: 'Robots', amount: 96 }, { name: 'Real Estate', amount: 146400 }],
+    noOfCities: cityNames.length,
+    whLevel: 2,
+    staff: [{ name: "Operations", count: 2 }, { name: "Engineer", count: 2 }, { name: "Management", count: 2 }, { name: "Business", count: 1 }],
+    advLevel: 1,
+    upgradesLevel: [
+      { name: 'FocusWires', lvl: 2 },
+      // { name: 'Wilson Analytics', lvl: 2 },
+      { name: 'Neural Accelerators', lvl: 2 },
+      { name: 'Speech Processor Implants', lvl: 2 },
+      { name: 'Nuoptimal Nootropic Injector Implants', lvl: 2 },
+      { name: 'Smart Factories', lvl: 10 },
+      { name: 'Smart Storage', lvl: 10 },
+    ]
+  };
+
+  while (!await growthLevelReached(ns, level2) && shouldRun) {
+    await growTo(ns, level2);
+    buyAllFundsFromHacknet(ns);
+    await ns.sleep(1000);
+  }
+
+  log(ns, "Corpo: Stage 3 agriculture started...", 'info', 2 * 1000);
+
+  let level3 = {
+    divType: 'Agriculture',
+    equipment: [{ name: 'Hardware', amount: 9300 }, { name: 'AI Cores', amount: 6270 }, { name: 'Robots', amount: 726 }, { name: 'Real Estate', amount: 230400 }],
+    noOfCities: cityNames.length,
+    whLevel: 5,
+    staff: [{ name: "Operations", count: 3 }, { name: "Engineer", count: 3 }, { name: "Management", count: 2 }, { name: "Business", count: 1 }],
+    advLevel: 1,
+    upgradesLevel: [
+      { name: 'FocusWires', lvl: 2 },
+      // { name: 'Wilson Analytics', lvl: 2 },
+      { name: 'Neural Accelerators', lvl: 2 },
+      { name: 'Speech Processor Implants', lvl: 2 },
+      { name: 'Nuoptimal Nootropic Injector Implants', lvl: 2 },
+      { name: 'Smart Factories', lvl: 10 },
+      { name: 'Smart Storage', lvl: 10 },
+    ]
+  };
+
+  while (!await growthLevelReached(ns, level3) && shouldRun) {
+    await growTo(ns, level3);
+    buyAllFundsFromHacknet(ns);
+    await ns.sleep(1000);
+  }
+
+  let tab = startIndustry(ns, 'Tobacco', tobaccoDiv);
+
+  log(ns, "Corpo: Started tobacco...", 'info', 2 * 1000);
+
+  let level4 = {
+    divType: 'Tobacco',
+    equipment: [{ name: 'Hardware', amount: 0 }, { name: 'AI Cores', amount: 0 }, { name: 'Robots', amount: 0 }, { name: 'Real Estate', amount: 0 }],
+    noOfCities: 1,
+    whLevel: 5,
+    staff: [{ name: "Operations", count: 10 }, { name: "Engineer", count: 10 }, { name: "Management", count: 5 }, { name: "Business", count: 1 }],
+    advLevel: 1,
+    upgradesLevel: [
+      { name: 'FocusWires', lvl: 15 },
+      // { name: 'Wilson Analytics', lvl: 1 },
+      // { name: 'Neural Accelerators', lvl: 20 },
+      // { name: 'Speech Processor Implants', lvl: 20 },
+      // { name: 'Nuoptimal Nootropic Injector Implants', lvl: 20 },
+      // { name: 'Smart Factories', lvl: 15 },
+      // { name: 'Smart Storage', lvl: 15 },
+    ]
+  };
+
+  if (startScript(ns, "zcorp.js", true, '--remakeProducts', runOn)) log(ns, "Corpo: Automating products...", 'info', 2 * 1000);
+  while (!await growthLevelReached(ns, level4) && shouldRun) {
+    await growTo(ns, level4);
+    buyAllFundsFromHacknet(ns);
+    buyAllReserachFromHacknet(ns);
+    await ns.sleep(1000);
+  }
 
 
-  ns.corporation.exportMaterial(agriDiv, ags.city, tobaccoDiv, tab.city, 'Plants', 'MAX');
-  ns.corporation.sellMaterial(agriDiv, ags.city, 'Plants', 'MAX', 'MP');
-  ns.corporation.limitMaterialProduction(agriDiv, ags.city, 'Food', 0);
+  // i would wait for the product to get finished, 
+  let prods = ns.corporation.getDivision(tobaccoDiv).products.map(p => { return ns.corporation.getProduct(tobaccoDiv, tab.city, p); });
+  if (prods.length < 1)
+    while (shouldRun && prods.length > 0 && !prods.every(p => p.developmentProgress >= 100))
+      await ns.sleep(1000);
+
+  if (!ns.corporation.hasUnlock('Export')) {
+    while (ns.corporation.getCorporation().funds < ns.corporation.getUnlockCost('Export'))
+      await ns.sleep(1000);
+    ns.corporation.purchaseUnlock('Export');
+  }
+
+  if (startScript(ns, "zcorp.js", true, '--exportLoop', runOn)) log(ns, "Corpo: Exporting loop...", 'info', 2 * 1000);
+
+  let level5 = {
+    divType: 'Tobacco',
+    equipment: [{ name: 'Hardware', amount: 0 }, { name: 'AI Cores', amount: 0 }, { name: 'Robots', amount: 0 }, { name: 'Real Estate', amount: 0 }],
+    noOfCities: cityNames.length,
+    whLevel: 8,
+    staff: [{ name: "Operations", count: 3 }, { name: "Engineer", count: 3 }, { name: "Management", count: 2 }, { name: "Business", count: 1 }],
+    advLevel: 5,
+    upgradesLevel: [
+      { name: 'FocusWires', lvl: 20 },
+      { name: 'Wilson Analytics', lvl: 1 },
+      { name: 'Neural Accelerators', lvl: 20 },
+      { name: 'Speech Processor Implants', lvl: 20 },
+      { name: 'Nuoptimal Nootropic Injector Implants', lvl: 20 },
+      { name: 'Smart Factories', lvl: 15 },
+      { name: 'Smart Storage', lvl: 15 },
+    ]
+  };
+
+  while (!await growthLevelReached(ns, level5) && shouldRun) {
+    await growTo(ns, level5);
+    buyAllFundsFromHacknet(ns);
+    buyAllReserachFromHacknet(ns);
+    await ns.sleep(1000);
+  }
+  log(ns, "Level 5...", 'info', 2 * 1000);
+
+
+  // that's end game.. we need technical analysis still
+  if (startScript(ns, "zcorp.js", true, '--steadyGrowth', runOn)) log(ns, "Corpo: Steady growth...", 'info', 2 * 1000);
+  if (startScript(ns, "zcorp.js", true, '--researchLoop', runOn)) log(ns, "Corpo: Research looping...", 'info', 2 * 1000);
+
 
   if (!shouldRun) return;
 
-
-  //  first round in... how to figure this out?
-  // let corp = ns.corporation.getCorporation();
-  //   if (corp.revenue < 2000000)
-
-  //   //
-  //   await findInvestors(ns, _1b * 60, _1m * 200); // it looks like we get 60b only
-
-  // start Corpo
-  // expand Agro to all cities
-  // get funding
-  // start tobacco
-  // expand tobacco, make new product
-  // start exporting plants from Ags to tobacco
 }
+
+/** @param {NS} ns */
+async function researchLoop(ns) {
+  while (shouldRun) {
+    for (let divName of ns.corporation.getCorporation().divisions) {
+      let div = ns.corporation.getDivision(divName);
+      let techs = [];
+      if (div.type == 'Tobacco')
+        techs = ['Hi-Tech R&D Laboratory', 'Market-TA.I', 'Market-TA.II', 'uPgrade: Fulcrum', 'uPgrade: Capacity.I', 'Drones', 'Drones - Assembly', 'Drones - Transport'];
+      if (div.type == 'Agriculture')
+        techs = ['Hi-Tech R&D Laboratory', 'Drones', 'Drones - Assembly', 'Drones - Transport'];
+      for (let tech of techs)
+        if (!research(ns, div.name, tech)) break;
+    }
+    await ns.sleep(2000);
+  }
+}
+
+/** @param {NS} ns */
+function research(ns, div, tech) {
+  if (ns.corporation.hasResearched(div, tech)) return true;
+  else if (ns.corporation.getDivision(div).researchPoints < ns.corporation.getResearchCost(div, tech)) return false;
+
+  ns.corporation.research(div, tech);
+  return true;
+}
+
 
 /** @param {NS} ns */
 async function exportLoop(ns) {
@@ -211,26 +475,11 @@ async function startCorpo(ns) {
   }
   else {
     // with 150b we can start a corpo - we could grind it first and found it, shouldn't take longer than 15 infi grinds
-    while (ns.getPlayer().money < _1b * 15 && shouldRun)
+    while (ns.getPlayer().money < _1b * 150 && shouldRun)
       await ns.sleep(1000);
     if (ns.corporation.createCorporation(corpoName)) {
 
       log(ns, `Corpo ${corpoName} started`);
-      ns.corporation.purchaseUnlock('Smart Supply');
-      // init upgrades
-      upgrade(ns, ['FocusWires',
-        'Neural Accelerators',
-        'Speech Processor Implants',
-        'Nuoptimal Nootropic Injector Implants',
-        'Smart Factories'], 2);
-
-      // agriculture
-      let ags = startIndustry(ns, 'Agriculture', agriDiv);
-      let tab = startIndustry(ns, 'Tobacco', tobaccoDiv);
-
-      ns.corporation.exportMaterial(agriDiv, ags.city, tobaccoDiv, tab.city, 'Plants', 'MAX');
-      ns.corporation.sellMaterial(agriDiv, ags.city, 'Plants', 'MAX', 'MP');
-      ns.corporation.limitMaterialProduction(agriDiv, ags.city, 'Food', 0);
 
       return true;
     }
@@ -243,7 +492,8 @@ async function startCorpo(ns) {
 /** @param {NS} ns */
 function startIndustry(ns, type, name) {
   // agriculture
-  ns.corporation.expandIndustry(type, name);
+  if (!ns.corporation.getCorporation().divisions.includes(name))
+    ns.corporation.expandIndustry(type, name);
 
   let div = ns.corporation.getDivision(name);
   let office = div.cities.map(c => ns.corporation.getOffice(div.name, c))[0];
@@ -259,96 +509,10 @@ function startIndustry(ns, type, name) {
 }
 
 
-/** @param {NS} ns */
-async function bumpDivision(ns, upgLevel, warehouseLvl, ops) {
-  if (ns.corporation.getUpgradeLevel('FocusWires') < upgLevel)
-    upgrade(ns, ['FocusWires',
-      'Neural Accelerators',
-      'Speech Processor Implants',
-      'Nuoptimal Nootropic Injector Implants',
-      'Smart Factories'], upgLevel);
-
-  let div = ns.corporation.getDivision(agriDiv);
-
-  // expand cities
-  for (let city of cities) {
-    if (!div.cities.includes(city)) {
-      ns.corporation.expandCity(div.name, city);
-      ns.corporation.purchaseWarehouse(div.name, city);
-    }
-    let office = ns.corporation.getOffice(div.name, city);
-    if (office.employeeJobs.Operations < ops)
-      hireStaff(ns, div.name, city, 3, 3, 0, 1, 0, 0);
-    ns.corporation.setSmartSupply(div.name, city, true);
-
-    ns.corporation.sellMaterial(div.name, city, 'Plants', 'MAX', 'MP');
-    ns.corporation.limitMaterialProduction(div.name, city, 'Food', 0);
-    // ns.corporation.sellMaterial(div.name, city, 'Food', 'MAX', 'MP');
-    if (ns.corporation.getWarehouse(div.name, city).level < warehouseLvl)
-      bumpWarehouse(ns, div.name, city, warehouseLvl);
-    // buyToQuantity(ns, div.name, city, 'Hardware', 125);
-    // buyToQuantity(ns, div.name, city, 'AI Cores', 75);
-    // buyToQuantity(ns, div.name, city, 'Real Estate', 23000);
-
-  }
-}
-
-
-/** @param {NS} ns */
-async function findInvestors(ns, amount, rev) {
-  if (!shouldFindInvestors) return;
-  let corp = ns.corporation.getCorporation();
-
-  if (corp.funds < 150000000000 && corp.revenue < rev) {
-
-    let offer = ns.corporation.getInvestmentOffer();
-    while (shouldRun && offer.funds < amount) {
-      await ns.sleep(1 * 1000);
-      offer = ns.corporation.getInvestmentOffer();
-    }
-    //TODO figure out profit vs offer and steps
-
-    if (shouldRun && offer.funds > amount) {
-      ns.corporation.acceptInvestmentOffer();
-      log(ns, `CORPO: Took an investment offer for ${offer.funds}`, 'success');
-    }
-  }
-}
-
-
-// function desingInProgress(ns, type)
-// {
-
-//     var divs = type ? ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d)).filter(d => d.type == type) :
-//       ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d)).filter(d => d.makesProducts);
-//     for (let div of divs) {
-
-//       let office = div.cities.map(c => ns.corporation.getOffice(div.name, c)).reduce((first, second) => first.numEmployees > second.numEmployees ? first : second);
-
-//       let prods = ns.corporation.getDivision(div.name).products.map(p => { return ns.corporation.getProduct(div.name, office.city, p); });
-//       for (let prod of prods)
-//         ns.corporation.setProductMarketTA2(div.name, prod.name, true);
-
-//       while (shouldRun && prods.length > 0 && !prods.every(p => p.developmentProgress >= 100)) 
-// }
 
 
 /** @param {NS} ns */
 async function steadyGrowth(ns, divType = 'Tobacco', shouldBuyMat = false, extendWh = false, shouldHireStaff = false, hireAdVs = false, buyUpgrades = false) {
-
-  // level upgrades
-  if (buyUpgrades)
-    upgrade(ns, ['Wilson Analytics',
-      'FocusWires',
-      'Neural Accelerators',
-      'Smart Storage',
-      'Smart Factories',
-      'DreamSense',
-      'ABC SalesBots',
-      'Project Insight',
-      'Speech Processor Implants',
-      'Nuoptimal Nootropic Injector Implants',
-      'Smart Factories'], 1);
 
   var divs = divType ? ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d)).filter(d => d.type == divType) : ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d));
   for (let div of divs) {
@@ -381,86 +545,42 @@ async function steadyGrowth(ns, divType = 'Tobacco', shouldBuyMat = false, exten
         await buyMat(ns, div.name, office.city, 'Robots', 100000 * industryData.robotFactor, extendWh);
         await buyMat(ns, div.name, office.city, 'Real Estate', 100000 * industryData.realEstateFactor, extendWh);
       }
-
   }
+
+  // level upgrades
+  if (buyUpgrades)
+    upgradeBy(ns, ['Wilson Analytics',
+      'FocusWires',
+      'Neural Accelerators',
+      'Smart Storage',
+      'DreamSense',
+      'ABC SalesBots',
+      'Project Insight',
+      'Speech Processor Implants',
+      'Nuoptimal Nootropic Injector Implants',
+      'Smart Factories'], 1);
+
 }
 
 /** @param {NS} ns */
-function upgrade(ns, upgrades, upgrBy) {
+function upgradeBy(ns, upgrades, upgrBy) {
   for (let upg of upgrades)
     for (let i = 0; i < upgrBy; i++)
       if (ns.corporation.getUpgradeLevelCost(upg) < ns.corporation.getCorporation().funds)
         ns.corporation.levelUpgrade(upg);
 }
 
-
 /** @param {NS} ns */
-async function expandIndust(ns, div) {
-  let d = ns.corporation.getDivision(div);
-  for (let city of cities) {
-    ns.corporation.cancelExportMaterial(div, city, 'Ags', city, 'Chemicals');
-    ns.corporation.exportMaterial(div, city, 'Ags', city, 'Chemicals', 'MAX');
-    if (d.cities.includes(city)) continue;
-
-    ns.corporation.expandCity(div, city);
-    ns.corporation.purchaseWarehouse(div, city);
-    hireStaff(ns, div, city, 3, 3, 0, 1, 0, 0);
-  }
-}
-
-/** @param {NS} ns */
-async function exportOnlyRequired(ns, what) {
-  // NOTE: to też nie wiem czy jest konieczne.. w sumie najważniejsze by było miejsce w magazynie - czyli upgrade ludzi i magazynu zawsze równolegle + export max + sell max, żeby nie blokowało magazynów
-  // co by miało sens to robić industry pod każde zapotrzebowanie z osobna, najłatwiej tak.. czyli chem ma swój water spring, agro ma swój, i zrobić wtedy matrix, ktory komu i iterować zapotrzebowanie.. czyli główny algorytm napierdala tabacco, a reszta nadgania i wszystko każdemu miastu równolegle
-  // spring -> chem1 -> agro -> tabaco
-  // agro2 -> chem1
-  // spring2 ->agro
-
-
-  while (shouldRun) {
-    let waterRequired = 0;
-    let waterProduced = 0;
-    // find total water required
-    // find total water produced
-    // try to export proper amount and sell the rest
-    // or upgrade to support the requirement
-    let water = ns.corporation.getMaterialData('Water');
-    var divs = ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d));
-    for (let div of divs) {
-      let offices = div.cities.map(c => ns.corporation.getOffice(div.name, c));
-      for (let office of offices) {
-        let waterMaterial = ns.corporation.getMaterial(div.name, office.city, 'Water');
-        if (waterMaterial.productionAmount < 0)
-          waterRequired += waterMaterial.productionAmount;
-        else
-          waterProduced += waterMaterial.productionAmount;
-        // debugger;
-        // ns.corporation.exportMaterial()
-      }
-
-    }
-
-    // debugger;
-
-    await ns.sleep(1000);
-    if (waterRequired * -1 > waterProduced) {
-      var div = ns.corporation.getCorporation().divisions.map(d => ns.corporation.getDivision(d)).filter(d => d.type == 'Spring Water')[0];
-      let industryData = ns.corporation.getIndustryData('Spring Water')
-      // continue;
-      // debugger;
-      // hire staff
-      // buy equipment
-
-      for (let office of div.cities.map(c => ns.corporation.getOffice(div.name, c))) {
-        hireStaff(ns, div.name, office.city, 2, 2, 0, 1, 0, 0);
-        await buyMat(ns, div.name, office.city, 'Hardware', 100000 * industryData.hardwareFactor);
-        await buyMat(ns, div.name, office.city, 'AI Cores', 100000 * industryData.aiCoreFactor);
-        await buyMat(ns, div.name, office.city, 'Robots', 100000 * industryData.robotFactor);
-        await buyMat(ns, div.name, office.city, 'Real Estate', 100000 * industryData.realEstateFactor);
-      }
+function upgradeTo(ns, upgrades, upgrTo) {
+  for (let upg of upgrades) {
+    let level = ns.corporation.getUpgradeLevel(upg);
+    while (level < upgrTo && ns.corporation.getUpgradeLevelCost(upg) < ns.corporation.getCorporation().funds) {
+      ns.corporation.levelUpgrade(upg);
+      level = ns.corporation.getUpgradeLevel(upg);
     }
   }
 }
+
 
 /** @param {NS} ns */
 async function buyMat(ns, div, city, mat, qty, noextend = false) {
@@ -483,28 +603,22 @@ async function buyMat(ns, div, city, mat, qty, noextend = false) {
 }
 
 /** @param {NS} ns */
-function buyToQuantity(ns, div, city, mat, qty) {
+function buyToQuantity(ns, div, city, mat, qty, expandWh = true) {
+  let matData = ns.corporation.getMaterialData(mat);
+  let reqSize = qty * matData.size;
+  if (!ns.corporation.hasWarehouse(div, city)) return;
+  let wh = ns.corporation.getWarehouse(div, city);
+  while (reqSize > wh.size - wh.sizeUsed && ns.corporation.getCorporation().funds > ns.corporation.getUpgradeWarehouseCost(div, city)) {
+    if (!expandWh) return;
+    ns.corporation.upgradeWarehouse(div, city, 1);
+    wh = ns.corporation.getWarehouse(div, city);
+  }
+  if (reqSize > wh.size - wh.sizeUsed) return;
   let stored = ns.corporation.getMaterial(div, city, mat).stored;
   if (stored < qty)
-    ns.corporation.bulkPurchase(div, city, mat, qty - stored);
+    if (matData.baseCost * (qty - stored) < ns.corporation.getCorporation().funds)
+      ns.corporation.bulkPurchase(div, city, mat, qty - stored);
 }
-
-// /** @param {NS} ns */
-// async function buyToQuantity(ns, div, city, mat, qty) {
-//   let matData = ns.corporation.getMaterialData(mat);
-//   let stored = ns.corporation.getMaterial(div, city, mat).stored;
-//   let req = qty - stored;
-//   req = req * matData.size;
-//   let wh = ns.corporation.getWarehouse(div, city);
-//   while (req < wh.size - wh.sizeUsed) {
-//     await ns.sleep(1000);
-//     ns.corporation.upgradeWarehouse(div, city, 1);
-//     wh = ns.corporation.getWarehouse(div, city);
-//   }
-
-//   if (stored < qty)
-//     ns.corporation.bulkPurchase(div, city, mat, req);
-// }
 
 /** @param {NS} ns */
 function bumpWarehouse(ns, div, city, level) {
@@ -530,6 +644,8 @@ async function remakeProducts(ns, type) {
           ns.corporation.setProductMarketTA2(div.name, prod.name, true);
         else if (ns.corporation.hasResearched(div.name, 'Market-TA.I'))
           ns.corporation.setProductMarketTA1(div.name, prod.name, true);
+        else for (let city of div.cities)
+          ns.corporation.sellProduct(div.name, city, prod.name, 'MAX', 'MP');
 
       while (shouldRun && prods.length > 0 && !prods.every(p => p.developmentProgress >= 100)) {
         await ns.sleep(1000);
@@ -550,9 +666,7 @@ async function remakeProducts(ns, type) {
       }
       if (ns.corporation.getCorporation().funds < designInvestment + advertisingInvestment) {
         await ns.sleep(2000)
-        
-        buyAllFundsFromHacknet(ns);
-        buyAllReserachFromHacknet(ns);
+
         continue;
       }
 
@@ -565,38 +679,43 @@ async function remakeProducts(ns, type) {
       ns.corporation.makeProduct(div.name, office.city, newName, designInvestment, advertisingInvestment);
 
       // debugger;
-
     }
+
+    buyAllFundsFromHacknet(ns);
+    if (ns.corporation.getCorporation().divisions.length > 1)
+      buyAllReserachFromHacknet(ns);
+    await ns.sleep(1000);
   }
 }
 
 /** @param {NS} ns */
-async function makeProducts(ns) {
-  let corp = ns.corporation.getCorporation();
-  for (let div of corp.divisions) {
-    // let offices = ns.corporation.getDivision(div).cities.map(c => { return ns.corporation.getOffice(div, c); });
-    let division = ns.corporation.getDivision(div);
-    for (let prod of division.products) {
-      ns.corporation.getProduct(div, "Sector-12", prod);
+function hireStaffTo(ns, div, city, staff = [{ name: "Operations", count: 1 }, { name: 'Engineer', count: 1 }, { name: 'Business', count: 1 }, { name: 'Management', count: 1 }, { name: 'Research & Development', count: 0 }, { name: 'Intern', count: 0 }]) {
+  const office = ns.corporation.getOffice(div.name, city);
+  for (let role of staff)
+    if (role.count < 0) role.count = 0;
+
+  let expectedSize = staff.reduce((a, v) => a + v.count, 0);
+
+  for (let role of staff)
+    for (let i = office.employeeJobs[role.name]; i < role.count; i++) {
+      if (office.size < office.numEmployees + expectedSize)
+        if (ns.corporation.getOfficeSizeUpgradeCost(div.name, city, 1) > ns.corporation.getCorporation().funds)
+          return;
+        else
+          ns.corporation.upgradeOfficeSize(div.name, city, 1);
+      ns.corporation.hireEmployee(div.name, city, role.name);
     }
-
-    ns.corporation.setProductMarketTA2(div, 'product', true);
-
-    ns.corporation.discontinueProduct('Tabak_' + randomString(5),)
-    ns.corporation.makeProduct(div, "Sector-12", 'Tabak v1', _1b, _1b);
-  }
 }
-
 /** @param {NS} ns */
-function hireStaffUpTo(ns, div, city, ops, engs, bus, mangs, rds, ints) {
+function hireStaffUpTo(ns, div, city, ops, eng, bus, man, rds, int) {
   const office = ns.corporation.getOffice(div, city);
   if (ops < 0) ops = 0;
-  if (engs < 0) engs = 0;
+  if (eng < 0) eng = 0;
   if (bus < 0) bus = 0;
-  if (mangs < 0) mangs = 0;
+  if (man < 0) man = 0;
   if (rds < 0) rds = 0;
-  if (ints < 0) ints = 0;
-  let expectedSize = ops + engs + bus + mangs + ints + rds;
+  if (int < 0) int = 0;
+  let expectedSize = ops + eng + bus + man + int + rds;
 
   if (office.size < expectedSize)
     ns.corporation.upgradeOfficeSize(div, city, expectedSize - office.size);
@@ -605,11 +724,11 @@ function hireStaffUpTo(ns, div, city, ops, engs, bus, mangs, rds, ints) {
       let distPoints = office.size - expectedSize;
       if (bus > 0 && distPoints > 0) bus++;
       if (ops > 0 && distPoints > 0) ops++;
-      if (engs > 0 && distPoints > 0) engs++;
-      if (ints > 0 && distPoints > 0) ints++;
-      if (mangs > 0 && distPoints > 0) mangs++;
+      if (eng > 0 && distPoints > 0) eng++;
+      if (int > 0 && distPoints > 0) int++;
+      if (man > 0 && distPoints > 0) man++;
       if (rds > 0 && distPoints > 0) rds++;
-      expectedSize = ops + engs + bus + mangs + ints + rds;
+      expectedSize = ops + eng + bus + man + int + rds;
     }
   }
   for (let i = office.employeeJobs.Business; i < bus; i++)
@@ -618,13 +737,13 @@ function hireStaffUpTo(ns, div, city, ops, engs, bus, mangs, rds, ints) {
   for (let i = office.employeeJobs.Operations; i < ops; i++)
     ns.corporation.hireEmployee(div, city, 'Operations');
 
-  for (let i = office.employeeJobs.Engineer; i < engs; i++)
+  for (let i = office.employeeJobs.Engineer; i < eng; i++)
     ns.corporation.hireEmployee(div, city, 'Engineer');
 
-  for (let i = office.employeeJobs.Intern; i < ints; i++)
+  for (let i = office.employeeJobs.Intern; i < int; i++)
     ns.corporation.hireEmployee(div, city, 'Intern');
 
-  for (let i = office.employeeJobs.Management; i < mangs; i++)
+  for (let i = office.employeeJobs.Management; i < man; i++)
     ns.corporation.hireEmployee(div, city, 'Management');
 
   for (let i = office.employeeJobs['Research & Development']; i < rds; i++)
@@ -662,10 +781,6 @@ function hire(ns, div, city, howMany, who) {
 async function bumpMoraleAndEnergy(ns) {
   let corp = ns.corporation.getCorporation();
   for (let div of corp.divisions) {
-    // let avgs = ns.corporation.getDivision(div).cities.map(c => { let off = ns.corporation.getOffice(div, c); return { m: off.avgMorale, e: off.avgEnergy }; });
-
-    // while (shouldRun && !avgs.every((avg) => avg.m > 99 && avg.e > 99)) {
-    // while (shouldRun && !avgs.every((avg) => avg.m > 99 && avg.e > 99)) {
     let divi = ns.corporation.getDivision(div);
     for (let city of divi.cities) {
 
@@ -675,30 +790,39 @@ async function bumpMoraleAndEnergy(ns) {
       if (office.avgMorale < office.maxMorale - 1)
         ns.corporation.throwParty(div, city, 1000000)
     }
-    // await ns.sleep(500);
-    // avgs = ns.corporation.getDivision(div).cities.map(c => { let off = ns.corporation.getOffice(div, c); return { m: off.avgMorale, e: off.avgEnergy }; });
   }
 
 }
 
 /** @param {NS} ns */
 function buyAllReserachFromHacknet(ns) {
-  // let upgs = ns.hacknet.getHashUpgrades();
-
-  // debugger;
   while (ns.hacknet.hashCost("Exchange for Corporation Research", 1) <= ns.hacknet.numHashes())
     ns.hacknet.spendHashes("Exchange for Corporation Research", 1);
-  // let bank = ns.hacknet.numHashes;
-  // let cost = ns.hacknet.hashCost("Exchange for Corporation Research",1);
 }
 
 /** @param {NS} ns */
 function buyAllFundsFromHacknet(ns) {
-  // let upgs = ns.hacknet.getHashUpgrades();
-
-  // debugger;
   while (ns.hacknet.hashCost("Sell for Corporation Funds", 1) <= ns.hacknet.numHashes())
     ns.hacknet.spendHashes("Sell for Corporation Funds", 1);
-  // let bank = ns.hacknet.numHashes;
-  // let cost = ns.hacknet.hashCost("Exchange for Corporation Research",1);
+}
+
+/** @param {NS} ns */
+async function findInvestors(ns, amount, rev) {
+  if (!shouldFindInvestors) return;
+  let corp = ns.corporation.getCorporation();
+
+  if (corp.funds < 150000000000 && corp.revenue < rev) {
+
+    let offer = ns.corporation.getInvestmentOffer();
+    while (shouldRun && offer.funds < amount) {
+      await ns.sleep(1 * 1000);
+      offer = ns.corporation.getInvestmentOffer();
+    }
+    //TODO figure out profit vs offer and steps
+
+    if (shouldRun && offer.funds > amount) {
+      ns.corporation.acceptInvestmentOffer();
+      log(ns, `CORPO: Took an investment offer for ${offer.funds}`, 'success');
+    }
+  }
 }

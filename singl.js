@@ -12,9 +12,10 @@ const argsSchema = [
   ['dontInstallAugments', false], // run normally, juts don't install augs when enough
   ['grindAugments', false], // try to grind as many from everywhere, used for "40 queued", "install 100", '255 neuroflux' after you're overflowing with money from a corporation
   ['noSleeves', false], // BN10 challenge
-  ['corpo', false], // start corporation scripts
+  ['corpo', true], // start corporation scripts
   ['limitHomeUpgrades', false], //BN1 challenge
-  ['noStanek', false], //BN1 challenge
+  ['noStanek', false], //BN13 challenge
+  ['noStock', true], // don't run stockmaster
 
 ];
 
@@ -36,7 +37,6 @@ let runOptions;
  * Press ESC to stop running (both infi and singl will be stopped)!
  *  @param {NS} ns */
 export async function main(ns) {
-
   runOptions = getConfiguration(ns, argsSchema);
   if (!runOptions) return; // Invalid options, or ran in --help mode.
 
@@ -87,7 +87,8 @@ export async function main(ns) {
 
     let runOn = runOptions.limitHomeUpgrades ? 'pserv-0' : 'home';
     // stockmaster isn't really spectacular in normal operation
-    // if (startScript(ns, "stockmaster.js")) log(ns, "Automating stock...", 'info', 2 * 1000);
+    if (!runOptions.noStock)
+      if (startScript(ns, "stockmaster.js")) log(ns, "Automating stock...", 'info', 2 * 1000);
     if (startScript(ns, "background_work.js", false, null, runOn)) log(ns, "Automating background work...", 'info', 2 * 1000);
     if (!runOptions.noStanek)
       if (startScript(ns, "lstanek.js", false, null, runOn)) log(ns, "Staneking...", 'info', 2 * 1000);
@@ -95,9 +96,7 @@ export async function main(ns) {
       if (startScript(ns, "sleeve.js", false, null, runOn)) log(ns, "Automating sleeves...", 'info', 2 * 1000);
     if (startScript(ns, "ultimate_spread.js", false, ['--noUpgrades'], runOn)) log(ns, "Hacking servers...", 'info', 2 * 1000);
     if (runOptions.corpo) {
-      if (startScript(ns, "zcorp.js", false, ['--loopMorale'], runOn)) log(ns, "Hacking servers...", 'info', 2 * 1000);
-      if (startScript(ns, "zcorp.js", false, ['--remakeProducts'], runOn)) log(ns, "Hacking servers...", 'info', 2 * 1000);
-      if (startScript(ns, "zcorp.js", false, ['--steadyGrowth'], runOn)) log(ns, "Hacking servers...", 'info', 2 * 1000);
+      if (startScript(ns, "zcorp.js", false)) log(ns, "Automating corpo...", 'info', 2 * 1000);
     }
     if (ns.getResetInfo().currentNode == 8) {
       while (shouldRun) {
@@ -126,10 +125,11 @@ export async function main(ns) {
   await grindAugmentations(ns, infi, runNumber);
   if (!shouldRun) { log(ns, 'Escape key pressed. Cancelling singl.js', 'error'); return; }
 
-  for (const factionname of ns.singularity.checkFactionInvitations()) {
-    if (ns.singularity.joinFaction(factionname))
-      log(ns, `Joined: ${factionname}`, 'warning');
-  }
+  joinFactions(ns);
+  // for (const factionname of ns.singularity.checkFactionInvitations()) {
+  //   if (ns.singularity.joinFaction(factionname))
+  //     log(ns, `Joined: ${factionname}`, 'warning');
+  // }
 
   if (!runOptions.dontInstallAugments) {
     if (!runOptions.limitHomeUpgrades) {
@@ -139,6 +139,8 @@ export async function main(ns) {
       while (ns.singularity.upgradeHomeCores())
         log(ns, `Upgraded cores to ${ns.getServer('home').cpuCores} on aug install`, 'success', 5 * 1000, true);
     }
+
+    LogState.augmentationCountdown = true;
     shouldRun = await countDown(ns, '`Installing Augmentations', 6);
     if (!shouldRun) { log(ns, 'Escape key pressed. Cancelling singl.js', 'error'); return; }
     // let counter = 6;
@@ -302,7 +304,8 @@ async function grindAugmentations(ns, infi, runNumber) {
   stopExpandingServers(ns);
 
   if (!runOptions.grindAugments)
-    startScript(ns, "stockmaster.js", false, ['-l']);
+    if (!runOptions.noStock)
+      startScript(ns, "stockmaster.js", false, ['-l']);
 
   let leftoverAugmentation;
   while (shouldRun && (leftoverAugmentation = findAugmentationToBuy(ns, ns.getPlayer().money, true, true, prioFactions, true))) {
@@ -325,7 +328,7 @@ async function grindAugmentations(ns, infi, runNumber) {
     pl = ns.getPlayer();
   }
 }
-function joinFactions(ns, runNumber, prioFactions = []) {
+function joinFactions(ns, runNumber = 0, prioFactions = []) {
   let invites = ns.singularity.checkFactionInvitations();
   for (const factionname of prioFactions) {
     if (invites.includes(factionname))
@@ -335,7 +338,7 @@ function joinFactions(ns, runNumber, prioFactions = []) {
 
   for (const factionname of invites) {
     if (runNumber > 2 && ['Sector-12', 'Aevum'].includes(factionname)) continue; // TODO: fix this based on prioFactions?
-
+    if (factionname == 'Church of the Machine God' && runOptions.noStanek) continue;
     if (ns.singularity.joinFaction(factionname))
       log(ns, `Joined: ${factionname}`, 'warning');
   }
@@ -477,42 +480,45 @@ export function findAugmentationToBuy(ns, moneyAvailable = null, hackingOnly = t
  * Will be announce and gives a chance to stop.
  * @param {NS} ns */
 async function killW0r1dD43m0n(ns) {
-  if (!runOptions || runOptions.dontKillWorldDaemon) return;
-  const target = 'w0r1d_d43m0n';
-  if (ns.getHackingLevel() > ns.getServerRequiredHackingLevel(target) && ns.singularity.getOwnedAugmentations().includes('The Red Pill')) {
-    if (numberOfPortsOpenable(ns) < 5) {
-      log(ns, `Couldn't crack ports on w0r1d_d43m0n`, 'warning', 1000 * 30);
-      return;
+  try {
+    if (!runOptions || runOptions.dontKillWorldDaemon) return;
+    const target = 'w0r1d_d43m0n';
+    if (ns.getHackingLevel() > ns.getServerRequiredHackingLevel(target) && ns.singularity.getOwnedAugmentations().includes('The Red Pill')) {
+      if (numberOfPortsOpenable(ns) < 5) {
+        log(ns, `Couldn't crack ports on w0r1d_d43m0n`, 'warning', 1000 * 30);
+        return;
+      }
+
+      shouldRun = await countDown(ns, 'Killing BITNODE', 11);
+      // log(ns, `Killing BITNODE in 15 seconds. Press ESC to cancel. `, 'warning', 1000 * 30);
+      // let counter = 11;
+      // while (counter-- > 0 && shouldRun) {
+      //   ns.toast(counter, 'warning', 1000);
+      //   await ns.sleep(1000);
+      // }
+      if (!shouldRun) return;
+
+      let next = findNextBitNode(ns);
+
+      // next = next + 1;
+      log(ns, `-------------------------------------------------------------------------------`, 'warning', 1000 * 1, true);
+      log(ns, `Killed BITNODE ${ns.getResetInfo().currentNode} and starting next on ${next} ${timeSinceBitNodeReset(ns)}`, 'warning', 1000 * 60 * 30, true);
+      LogState.reset();
+      ns.singularity.destroyW0r1dD43m0n(next, 'starter.js');
+      // jumpTo(ns, target);
+      // await ns.singularity.installBackdoor();
+      log(ns, `Killed BITNODE and starting next on ${next} `, 'warning', 1000 * 60 * 30);
+
+      let counter = 5;
+      while (counter-- > 0)
+        await ns.sleep(1000);
+
+      // on some bitnodes there are descriptions which block further execution.. maybe this helps
+      clickByXpath("//*[contains(text(), 'Continue ...')]");
+
     }
-
-    shouldRun = await countDown(ns, 'Killing BITNODE', 11);
-    // log(ns, `Killing BITNODE in 15 seconds. Press ESC to cancel. `, 'warning', 1000 * 30);
-    // let counter = 11;
-    // while (counter-- > 0 && shouldRun) {
-    //   ns.toast(counter, 'warning', 1000);
-    //   await ns.sleep(1000);
-    // }
-    if (!shouldRun) return;
-
-    let next = findNextBitNode(ns);
-
-    // next = next + 1;
-    log(ns, `-------------------------------------------------------------------------------`, 'warning', 1000 * 1, true);
-    log(ns, `Killed BITNODE ${ns.getResetInfo().currentNode} and starting next on ${next} ${timeSinceBitNodeReset(ns)}`, 'warning', 1000 * 60 * 30, true);
-    LogState.reset();
-    ns.singularity.destroyW0r1dD43m0n(next, 'starter.js');
-    // jumpTo(ns, target);
-    // await ns.singularity.installBackdoor();
-    log(ns, `Killed BITNODE and starting next on ${next} `, 'warning', 1000 * 60 * 30);
-
-    let counter = 5;
-    while (counter-- > 0)
-      await ns.sleep(1000);
-
-    // on some bitnodes there are descriptions which block further execution.. maybe this helps
-    clickByXpath("//*[contains(text(), 'Continue ...')]");
-
   }
+  catch { }
 }
 
 /** Buys Tor and all the hacking apps
