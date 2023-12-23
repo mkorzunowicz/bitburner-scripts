@@ -1,0 +1,36 @@
+// there's a problem with scanning, as it takes a while for the script to finish
+// besides no recursion available as there's no function declaration possible
+
+all = ['home']
+scanned = []
+counter = 10
+nextBatch = all;
+while (counter >0)
+{
+	added = []
+	for(i=0; i <nextBatch.length; i++)
+	{
+		if (scanned.includes(nextBatch[i]))
+			continue;
+		
+		
+		more = scan(nextBatch[i])
+		scanned.push(nextBatch[i]);
+		for(j=0; j <more.length; j++)
+		{
+			if (scanned.includes(more[j]))
+				continue;
+			added.push(more[j]);
+		}
+	}
+	tprint("added: " + added)
+	for(i=0; i <added.length; i++)
+		all.push(added[i])
+	
+	// tprint("after run" + counter + ": "  + all);
+	counter--;
+	nextBatch = added;
+}
+
+tprint("after run" + counter + ": "  + all);
+

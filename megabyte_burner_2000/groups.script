@@ -1,0 +1,23 @@
+
+servs = ['CSEC', 'avmnite-02h','I.I.I.I','run4theh111z', 'w0r1d_d43m0n']
+
+for(i=0; i <servs.length; i++)
+{
+    hostname = servs[i]
+	if (hasRootAccess(hostname))
+		continue;
+    tprint("taking over: " +hostname)
+    brutessh(hostname)
+    ftpcrack(hostname)
+    relaysmtp(hostname)
+    httpworm(hostname)
+    sqlinject(hostname)
+    
+	if (getHackingLevel() > getServerRequiredHackingLevel(hostname))
+	{
+		nuke(hostname)
+		hack(hostname)
+	}
+	else 
+		tprint("Skipping: " + hostname + " hacking too low. Needed: " + getServerRequiredHackingLevel(hostname))
+}

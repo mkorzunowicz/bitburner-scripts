@@ -1,11 +1,8 @@
-/** @param {NS} ns */
-export async function main(ns) {
-  // buy TOR first
-  // buy -l ; buy BruteSSH.exe ; buy DeepscanV1.exe ; buy AutoLink.exe ; buy FTPCrack.exe ; buy relaySMTP.exe ; buy HTTPWorm.exe ; buy SQLInject.exe ; buy DeepscanV2.exe ; buy ServerProfiler.exe ;  buy Formulas.exe
+# Snippets
 
-  // run BruteSSH.exe ; run FTPCrack.exe ; run relaySMTP.exe ; run HTTPWorm.exe ; run SQLInject.exe ; run NUKE.exe ; backdoor
+buy TOR first - but remember to grind intelligence :)
 
-
+```shell
 alias -g buyall="buy -l ; buy BruteSSH.exe ; buy DeepscanV1.exe ; buy AutoLink.exe ; buy FTPCrack.exe ; buy relaySMTP.exe ; buy HTTPWorm.exe ; buy SQLInject.exe ; buy DeepscanV2.exe ; buy ServerProfiler.exe ;  buy Formulas.exe"
 alias -g buyhacks="buy -l ; buy BruteSSH.exe ; buy FTPCrack.exe ; buy relaySMTP.exe ; buy HTTPWorm.exe ; buy SQLInject.exe ;"
 
@@ -22,14 +19,15 @@ alias -g repinfi="home;run infi_loop.js all"
 
 alias -g start="home;run starter.js"
 
-//hackall
-backd CSEC 
-//215
-backd avmnite-02h 
-//362
-backd I.I.I.I 
-// 508
-backd run4theh111z 
+#hackall
+backd CSEC
+#215
+backd avmnite-02h
+#362
+backd I.I.I.I
+#508
+backd run4theh111z
+
 backd The-Cave
 
 backd w0r1d_d43m0n
@@ -52,7 +50,6 @@ moneyinfi "ECorp" 1 "Slum Snakes"
 moneyinfi "ECorp" 15 "Daedalus"
 
 
-
 moneyinfi "Noodle Bar" 1 "BitRunners"
 
-}
+```

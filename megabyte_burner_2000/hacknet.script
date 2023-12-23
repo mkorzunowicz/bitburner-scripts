@@ -1,0 +1,25 @@
+
+while(true)
+{    
+	if (getNextHacknetNodeCost() < getServerMoneyAvailable('home'))
+		print("hacknet bought: " + purchaseHacknetNode());
+	
+    
+    for(i = 0; i < hacknetnodes.length; i++) {
+    
+        print("upgrading hacknet: " + i)
+		
+		while(hacknetnodes[i].level < 200 && hacknetnodes[i].upgradeLevel(10))
+			print("upgrading level by 10 on hacknet"+i)
+            
+		
+		while(hacknetnodes[i].ram < 64 && hacknetnodes[i].upgradeRam())
+			print("upgrading ram on hacknet"+i)
+
+		while(hacknetnodes[i].cores < 16 && hacknetnodes[i].upgradeCore())
+			print("upgrading cores on hacknet"+i)
+			
+    }
+
+    sleep(10);
+}
