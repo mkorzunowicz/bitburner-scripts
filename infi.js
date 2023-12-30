@@ -1,6 +1,6 @@
 // from https://pastebin.com/raw/7DuFYDpJ
 // reddit post: https://www.reddit.com/r/Bitburner/comments/btea4k/comment/i9ljape/?utm_source=share&utm_medium=web2x&context=3
-// modifications by jason goemaat:
+// modifications by Jason Goemaat https://github.com/JasonGoemaat/bitburner-batcher/blob/master/main/tools/infiltrate.js:
 //    1. add 'waitFrames' to main loop for transition from init -> play
 //    2. fix last 'nice' guard string from 'based' to 'straightforward'
 //    3. increase speed from 22 to 30
